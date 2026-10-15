@@ -29,6 +29,36 @@ layers instead, so a PSD round trip needs no format changes and other apps see p
 each group was generated from is kept in the session only: after reopening a file the group is an
 ordinary group (the variations are all still there; show one by hand), and Generate More is off.
 
+## Reference images
+
+Generative Fill can add a particular subject, such as a person, into the selection. In the fill
+dialog, press Add reference… in the Reference row and choose one image file (PNG, JPEG, WebP,
+HEIC, TIFF, BMP, GIF or PSD). A thumbnail shows the image as the provider will get it, and × removes
+it. Leave the prompt empty and the request is simply "add the subject from the reference into the
+selection". The reference is remembered for the session only, so the next fill starts with it
+until it is removed, and is never saved in the document.
+
+- **Providers.** OpenAI GPT Image and Google Gemini (every model except Nano Banana 2 Lite, whose
+  API takes no reference). The other providers have no reference input in their APIs; Ideogram's
+  character reference exists only on a legacy endpoint that is being removed, so PhotoCraft uses
+  the current one without it. For a provider that can't use a reference, the dialog shows a note
+  and Generate stays disabled until the reference is removed or another provider is chosen; the
+  Reference row is shown only when some set-up provider supports it.
+- **What is sent.** The file is flattened, converted to sRGB and scaled down to at most 1024 px on
+  the long side (never enlarged), with transparent areas turned white, then encoded as an opaque
+  PNG. OpenAI gets the photo and then the reference as two `image[]` parts, with a sentence in the
+  prompt saying the second image is the reference. Gemini gets the reference as the last input
+  image, with a matching sentence. Files over 50 MB, images over 100 megapixels, and images whose
+  long side is under 64 px are refused with an error.
+- **Privacy.** The reference goes to the chosen provider with the request (once per variation, like
+  the photo) and nowhere else. It is not stored in the document or written to logs; only its path
+  appears in the command's params. With `PHOTOCRAFT_GENAI_DUMP` set, the request folder also holds
+  `sent-reference.png`.
+- **Results.** Likeness is good but not exact; generating a few variations, or Generate More,
+  helps. Generate More reuses the reference of the original fill; passing `reference` replaces it.
+- **Policies.** The providers' own policies on real people's likenesses apply. A request they
+  decline comes back as an error from the provider, and nothing is added.
+
 ## Providers
 
 Nine providers are built in; none is privileged and all are off until their credentials are
@@ -42,7 +72,7 @@ entered. Gemini (the Nano Banana image models, default `gemini-nano-banana-2.1`)
 | FLUX.1 Fill [pro] · fal (`flux-fill.fal`) | API key | queue.fal.run | `fal.media`, `*.fal.media` | optional | per the account's media-expiry setting |
 | FLUX.1 Fill [pro] · Replicate (`flux-fill.replicate`) | API token | api.replicate.com | `replicate.delivery`, `*.replicate.delivery` | optional | uploaded inputs deleted by PhotoCraft after each fill; prediction data per Replicate's policy (1 h) |
 | Adobe Firefly Fill (`firefly`) | client ID + secret | ims-na1.adobelogin.com, firefly-api.adobe.io | *.amazonaws.com (pre-signed) | required | uploads kept 7 days |
-| Ideogram 3.0 Inpaint (`ideogram-v3`) | API key | api.ideogram.ai | ideogram.ai | required | temporary URLs |
+| Ideogram 3.0 Inpaint (`ideogram-v3`) | API key | api.ideogram.ai (`/v2/image/inpaint/ideogram-3`) | ideogram.ai | required | temporary URLs |
 | Bria Gen Fill and Erase (`bria`) | API token | engine.prod.bria-api.com | `*.bria-api.com` / `*.bria.ai` | optional (Erase without) | temporary URLs |
 | Stability AI Inpaint (`stability`) | API key | api.stability.ai | inline | optional | per Stability's terms |
 | OpenAI GPT Image (`openai`) | API key | api.openai.com | inline | optional | per OpenAI's terms |
@@ -65,8 +95,9 @@ Rules every provider follows:
   request already in flight finishes and its result is discarded.
 
 **Verified live (2026-10-12).** OpenAI, Stability, Bria and Black Forest Labs were exercised
-against the real services (a prompt fill and a promptless removal each). Ideogram's request reached
-the service but the test key was rejected. fal, Replicate, Adobe Firefly and Gemini are covered by
+against the real services (a prompt fill and a promptless removal each). Ideogram was only tried
+against its older endpoint, where the test key was rejected; the current endpoint it now uses
+(`/v2/image/inpaint/ideogram-3`) has not yet been checked live. fal, Replicate, Adobe Firefly and Gemini are covered by
 unit tests with recorded responses only.
 
 ## What is sent
@@ -120,9 +151,9 @@ request (`PHOTOCRAFT_LIVE_REPLAY`). Gemini returns JPEG (its only output format)
 ## Automation
 
 `edit.generativeFill` is a normal engine command (one undo step, a cancellable job, `prompt`,
-`variations` (1 to 4, default 3) and `provider` params) so scripts and recorded actions can run it locally, but
+`variations` (1 to 4, default 3), `provider` and `reference` params) so scripts and recorded actions can run it locally, but
 automation (the control channel and MCP) may not: `authorize_engine_command` refuses it and
-`layer.generative.more` (which also takes `provider`), because they upload document pixels. `layer.generative.selectVariation`
+`layer.generative.more` (which also takes `provider` and `reference`), because they upload document pixels. `layer.generative.selectVariation`
 sends nothing and is allowed. An
 explicit opt-in for automation can come later.
 
