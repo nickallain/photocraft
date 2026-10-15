@@ -4194,3 +4194,12 @@ navigator	Zoom	Zoom
 	Sends the same area and prompt to {name} again for three more.	Vuelve a enviar la misma área y descripción a {name} para obtener tres más.
 	{name}, which made this layer, is no longer set up.	{name}, que creó esta capa, ya no está configurado.
 	Generate More	Generar más
+	Reference	Referencia
+	Add reference…	Añadir referencia…
+	Remove the reference	Quitar la referencia
+	No file was chosen.	No se eligió ningún archivo.
+	Reference images need the desktop app.	Las imágenes de referencia necesitan la aplicación de escritorio.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} no puede usar una imagen de referencia. Elija OpenAI o Gemini, o quite la referencia.
+	If you add a reference image to a fill, it is sent too.	Si añade una imagen de referencia a un relleno, también se envía.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	El área seleccionada, la imagen que la rodea, la imagen de referencia y la descripción se envían a {name} ({model}).
+	Reference: {name}	Referencia: {name}

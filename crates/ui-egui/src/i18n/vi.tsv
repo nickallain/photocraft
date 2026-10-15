@@ -3719,3 +3719,12 @@ curves	Smooth	Làm mượt
 	Sends the same area and prompt to {name} again for three more.	Gửi lại cùng vùng và câu lệnh tới {name} để có thêm ba biến thể.
 	{name}, which made this layer, is no longer set up.	{name}, nhà cung cấp đã tạo lớp này, không còn được thiết lập.
 	Generate More	Tạo thêm
+	Reference	Tham chiếu
+	Add reference…	Thêm tham chiếu…
+	Remove the reference	Gỡ tham chiếu
+	No file was chosen.	Chưa chọn tệp nào.
+	Reference images need the desktop app.	Ảnh tham chiếu cần ứng dụng máy tính.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} không dùng được ảnh tham chiếu. Hãy chọn OpenAI hoặc Gemini, hoặc gỡ tham chiếu.
+	If you add a reference image to a fill, it is sent too.	Nếu bạn thêm ảnh tham chiếu vào một lần tô, ảnh đó cũng được gửi đi.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Vùng được chọn, phần ảnh xung quanh, ảnh tham chiếu và câu lệnh được gửi tới {name} ({model}).
+	Reference: {name}	Tham chiếu: {name}

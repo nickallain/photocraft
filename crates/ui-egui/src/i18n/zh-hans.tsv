@@ -2849,3 +2849,12 @@ curves	Smooth	平滑
 	Sends the same area and prompt to {name} again for three more.	再次将相同区域和描述发送到 {name}，再生成三个。
 	{name}, which made this layer, is no longer set up.	创建此图层的 {name} 已不再设置。
 	Generate More	生成更多
+	Reference	参考
+	Add reference…	添加参考图…
+	Remove the reference	移除参考图
+	No file was chosen.	未选择文件。
+	Reference images need the desktop app.	参考图需要桌面版应用。
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} 无法使用参考图。请选择 OpenAI 或 Gemini，或移除参考图。
+	If you add a reference image to a fill, it is sent too.	如果为填充添加了参考图，参考图也会一并发送。
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	选中的区域、其周围的图像、参考图和描述会发送给 {name}（{model}）。
+	Reference: {name}	参考图：{name}

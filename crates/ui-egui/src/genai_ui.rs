@@ -38,7 +38,16 @@ pub struct Runtime {
     thumbs: std::collections::HashMap<LayerId, (u64, egui::TextureHandle)>,
     /// The provider last chosen in the prompt dialog, this session.
     last_provider: Option<String>,
+    /// The reference image last used in the prompt dialog, this session.
+    pub(crate) last_reference: Option<String>,
+    /// The reference row's thumbnail: (path, texture).
+    reference_thumb: Option<(String, egui::TextureHandle)>,
+    /// A reference path whose thumbnail couldn't be made, so it isn't retried every frame.
+    reference_thumb_failed: Option<String>,
 }
+
+/// The file types Add reference… offers.
+pub(crate) const REFERENCE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "heic", "heif", "tif", "tiff", "bmp", "gif", "psd"];
 
 /// What Generative AI Settings keeps in `prefs.dialogs[PREF]`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -251,7 +260,74 @@ fn open_prompt(app: &mut PhotocraftApp) -> u64 {
         .or_else(|| app.session.image_provider().map(|p| p.info().id.to_owned()))
         .unwrap_or_default();
     f.insert("provider".into(), json!(chosen));
+    // Only when the row to see and remove it is shown.
+    let reference = app.genai.last_reference.clone().filter(|_| reference_row_visible(app)).unwrap_or_default();
+    f.insert("reference".into(), json!(reference));
     app.ui.open_dialog(DialogKind::Command, f)
+}
+
+/// Is the reference row shown? Only when a configured provider can use a reference.
+pub(crate) fn reference_row_visible(app: &PhotocraftApp) -> bool {
+    app.session.image_provider_ids().iter().any(|id| app.session.image_provider_by_id(id).is_some_and(|p| p.supports_reference()))
+}
+
+/// Add reference…: a file picker; the chosen path goes into the prompt dialog's `reference` field.
+pub(crate) fn pick_reference(app: &mut PhotocraftApp, dialog: u64) -> Result<Value, String> {
+    let request = crate::file_dialog::FileDialogRequest::Open {
+        multiple: false,
+        initial_dir: None,
+        extensions: Some(REFERENCE_EXTENSIONS.iter().map(|e| (*e).to_owned()).collect()),
+    };
+    app.ask_file(request, move |app, answer| {
+        let path = match answer {
+            crate::file_dialog::FileDialogAnswer::Paths(p) => p.into_iter().next().ok_or_else(|| tl!("No file was chosen.").to_string())?,
+            _ => return Err(tl!("Reference images need the desktop app.").to_string()),
+        };
+        // Load once now so a bad file is reported at once (and the thumbnail can be made).
+        photocraft_engine::genai_cmds::load_reference(&path)?;
+        if let Some(d) = app.ui.dialogs.iter_mut().find(|d| d.id == dialog) {
+            d.fields.insert("reference".into(), json!(path));
+        }
+        Ok(json!({"reference": path}))
+    })
+}
+
+/// Remove the reference: from the dialog and from what the next prompt dialog starts with.
+pub(crate) fn clear_reference(app: &mut PhotocraftApp, f: &mut Map<String, Value>) {
+    f.insert("reference".into(), json!(""));
+    app.genai.last_reference = None;
+    app.genai.reference_thumb = None;
+    app.genai.reference_thumb_failed = None;
+}
+
+fn chosen_reference(f: &Map<String, Value>) -> Option<&str> {
+    f.get("reference").and_then(Value::as_str).filter(|s| !s.is_empty())
+}
+
+/// The reference row's thumbnail: the image as the provider gets it. `None` when it can't be read
+/// (the fill then reports why).
+fn reference_thumb(app: &mut PhotocraftApp, ctx: &egui::Context, path: &str) -> Option<egui::TextureHandle> {
+    if let Some((p, tex)) = &app.genai.reference_thumb
+        && p == path
+    {
+        return Some(tex.clone());
+    }
+    if app.genai.reference_thumb_failed.as_deref() == Some(path) {
+        return None;
+    }
+    let img = photocraft_engine::genai_cmds::load_reference(path).ok().and_then(|png| photocraft_codecs::decode(&png).ok()).and_then(|img| {
+        let size = [usize::try_from(img.width()).ok()?, usize::try_from(img.height()).ok()?];
+        let rgba = img.to_rgba8();
+        (rgba.len() == size[0] * size[1] * 4).then(|| egui::ColorImage::from_rgba_unmultiplied(size, &rgba))
+    });
+    let Some(img) = img else {
+        app.genai.reference_thumb_failed = Some(path.to_owned());
+        return None;
+    };
+    let tex = ctx.load_texture("genai-reference", img, egui::TextureOptions::LINEAR);
+    app.genai.reference_thumb = Some((path.to_owned(), tex.clone()));
+    app.genai.reference_thumb_failed = None;
+    Some(tex)
 }
 
 pub fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, Value>) {
@@ -299,18 +375,53 @@ fn prompt_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, V
         });
         ui.add_space(6.0);
     }
+    if reference_row_visible(app) || chosen_reference(f).is_some() {
+        ui.horizontal(|ui| {
+            ui.label(tl!("Reference"));
+            match chosen_reference(f).map(str::to_owned) {
+                None => {
+                    if crate::widgets::secondary_button(ui, tl!("Add reference…"), 0.0).clicked()
+                        && let Some(id) = app.ui.dialogs.iter().find(|d| d.fields.contains_key(PROMPT_MARK)).map(|d| d.id)
+                        && let Err(e) = pick_reference(app, id)
+                    {
+                        app.ui.status = e;
+                    }
+                }
+                Some(path) => {
+                    if let Some(tex) = reference_thumb(app, ui.ctx(), &path) {
+                        // Fit in 96 × 48 (a panorama would otherwise widen the dialog).
+                        let size = tex.size_vec2();
+                        let k = (96.0 / size.x.max(1.0)).min(48.0 / size.y.max(1.0));
+                        ui.image((tex.id(), size * k));
+                    }
+                    let name = std::path::Path::new(&path).file_name().map_or(path.clone(), |n| n.to_string_lossy().into_owned());
+                    ui.label(name).on_hover_text(&path);
+                    if crate::icons::button(ui, "x", 18.0, false, tl!("Remove the reference")).clicked() {
+                        clear_reference(app, f);
+                    }
+                }
+            }
+        });
+        ui.add_space(6.0);
+    }
+    let reference = chosen_reference(f).is_some();
     if let Some(p) = app.session.image_provider_by_id(&chosen).or_else(|| app.session.image_provider()) {
         let info = p.info();
+        if reference && !p.supports_reference() {
+            faint(
+                ui,
+                &crate::i18n::fmt(tl!("{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference."), &[("provider", info.name)]),
+            );
+        }
         if p.needs_prompt() && prompt.trim().is_empty() {
             faint(ui, &crate::i18n::fmt(tl!("{provider} needs a prompt."), &[("provider", info.name)]));
         }
-        faint(
-            ui,
-            &crate::i18n::fmt(
-                tl!("The selected area, the image around it and the prompt are sent to {name} ({model})."),
-                &[("name", info.name), ("model", &info.model)],
-            ),
-        );
+        let sent = if reference {
+            tl!("The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).")
+        } else {
+            tl!("The selected area, the image around it and the prompt are sent to {name} ({model}).")
+        };
+        faint(ui, &crate::i18n::fmt(sent, &[("name", info.name), ("model", &info.model)]));
     }
 }
 
@@ -417,6 +528,9 @@ fn provider_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String,
             &[("name", spec.name), ("host", spec.host)],
         ),
     );
+    if app.session.image_provider_by_id(spec.id).is_some_and(|p| p.supports_reference()) {
+        faint(ui, tl!("If you add a reference image to a fill, it is sent too."));
+    }
     if !spec.result_hosts.is_empty() {
         let hosts = spec.result_hosts.iter().map(|h| h.trim_start_matches('.')).collect::<Vec<_>>().join(", ");
         faint(ui, &crate::i18n::fmt(tl!("Results are downloaded from {hosts}."), &[("hosts", &hosts)]));
@@ -466,6 +580,9 @@ pub fn can_confirm(app: &PhotocraftApp, fields: &Map<String, Value>) -> bool {
     let prompt = fields.get("prompt").and_then(Value::as_str).unwrap_or("");
     let chosen = fields.get("provider").and_then(Value::as_str).unwrap_or("");
     let provider = app.session.image_provider_by_id(chosen).or_else(|| app.session.image_provider());
+    if chosen_reference(fields).is_some() && provider.is_some_and(|p| !p.supports_reference()) {
+        return false;
+    }
     !(provider.is_some_and(|p| p.needs_prompt()) && prompt.trim().is_empty())
 }
 
@@ -477,6 +594,10 @@ fn confirm_prompt(app: &mut PhotocraftApp, f: &Map<String, Value>) -> Result<Val
     let mut params = json!({"prompt": prompt});
     if let Some(id) = &chosen {
         params["provider"] = json!(id);
+    }
+    if let Some(path) = chosen_reference(f) {
+        params["reference"] = json!(path);
+        app.genai.last_reference = Some(path.to_owned());
     }
     app.genai.last_provider = chosen;
     app.run(FILL, params)
@@ -605,6 +726,17 @@ pub(crate) fn more_tooltip(app: &PhotocraftApp, group: LayerId) -> String {
     }
 }
 
+/// The Variations header's tooltip: the prompt the layer was made with, and its reference image.
+pub(crate) fn variations_tooltip(app: &PhotocraftApp, group: LayerId) -> String {
+    let prompt = app.session.generative_prompt(group).unwrap_or("");
+    let mut tip = if prompt.is_empty() { tl!("No prompt: continues the image").to_owned() } else { prompt.to_owned() };
+    if let Some(n) = app.session.generative_reference_name(group) {
+        tip.push('\n');
+        tip.push_str(&crate::i18n::fmt(tl!("Reference: {name}"), &[("name", n)]));
+    }
+    tip
+}
+
 /// Properties › Variations, for the active generative layer (or one of its variations): a row of
 /// thumbnails, one per variation (click one to show it), and Generate More, as Photoshop's
 /// Properties panel offers for a generative layer. Compact, since the dock can be short.
@@ -616,14 +748,14 @@ pub fn variations_section(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     if let Some(st) = app.session.active() {
         app.genai.thumbs.retain(|id, _| st.doc.layer(*id).is_some());
     }
-    let prompt = app.session.generative_prompt(group_id).unwrap_or("").to_owned();
+    let head_tip = variations_tooltip(app, group_id);
     let tip = more_tooltip(app, group_id);
     let enabled = app.session.is_enabled(MORE);
     let mut more = false;
     ui.add_space(2.0);
     ui.horizontal(|ui| {
         let head = ui.label(egui::RichText::new(tl!("Variations")).font(crate::theme::semibold(12.5)).color(t.text));
-        head.on_hover_text(if prompt.is_empty() { tl!("No prompt: continues the image") } else { &prompt });
+        head.on_hover_text(head_tip);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             more = ui.add_enabled_ui(enabled, |ui| crate::widgets::secondary_button(ui, tl!("Generate More"), 0.0).on_hover_text(tip)).inner.clicked();
         });

@@ -4353,3 +4353,12 @@ shape	Appearance	Aspetto
 	Sends the same area and prompt to {name} again for three more.	Invia di nuovo la stessa area e la stessa descrizione a {name} per altre tre.
 	{name}, which made this layer, is no longer set up.	{name}, che ha creato questo livello, non è più configurato.
 	Generate More	Genera altre
+	Reference	Riferimento
+	Add reference…	Aggiungi riferimento…
+	Remove the reference	Rimuovi il riferimento
+	No file was chosen.	Nessun file scelto.
+	Reference images need the desktop app.	Le immagini di riferimento richiedono l’app desktop.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} non può usare un’immagine di riferimento. Scegli OpenAI o Gemini, oppure rimuovi il riferimento.
+	If you add a reference image to a fill, it is sent too.	Se aggiungi un’immagine di riferimento a un riempimento, viene inviata anch’essa.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	L’area selezionata, l’immagine circostante, l’immagine di riferimento e la descrizione vengono inviate a {name} ({model}).
+	Reference: {name}	Riferimento: {name}

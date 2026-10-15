@@ -3831,3 +3831,12 @@ curves	Smooth	Wygładź
 	Sends the same area and prompt to {name} again for three more.	Wysyła ten sam obszar i opis ponownie do {name}, aby uzyskać trzy kolejne.
 	{name}, which made this layer, is no longer set up.	{name}, który utworzył tę warstwę, nie jest już skonfigurowany.
 	Generate More	Generuj więcej
+	Reference	Odniesienie
+	Add reference…	Dodaj odniesienie…
+	Remove the reference	Usuń odniesienie
+	No file was chosen.	Nie wybrano pliku.
+	Reference images need the desktop app.	Obrazy odniesienia wymagają aplikacji na komputer.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} nie może użyć obrazu odniesienia. Wybierz OpenAI lub Gemini albo usuń odniesienie.
+	If you add a reference image to a fill, it is sent too.	Jeśli dodasz obraz odniesienia do wypełnienia, on także zostanie wysłany.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Zaznaczony obszar, otaczający go obraz, obraz odniesienia i opis są wysyłane do {name} ({model}).
+	Reference: {name}	Odniesienie: {name}

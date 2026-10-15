@@ -3932,3 +3932,12 @@ curves	Smooth	Εξομάλυνση
 	Sends the same area and prompt to {name} again for three more.	Στέλνει ξανά την ίδια περιοχή και περιγραφή στο {name} για τρεις ακόμη.
 	{name}, which made this layer, is no longer set up.	Το {name}, που δημιούργησε αυτό το επίπεδο, δεν είναι πλέον ρυθμισμένο.
 	Generate More	Δημιουργία περισσότερων
+	Reference	Αναφορά
+	Add reference…	Προσθήκη αναφοράς…
+	Remove the reference	Αφαίρεση της αναφοράς
+	No file was chosen.	Δεν επιλέχθηκε αρχείο.
+	Reference images need the desktop app.	Οι εικόνες αναφοράς χρειάζονται την εφαρμογή υπολογιστή.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	Το {provider} δεν μπορεί να χρησιμοποιήσει εικόνα αναφοράς. Επιλέξτε OpenAI ή Gemini, ή αφαιρέστε την αναφορά.
+	If you add a reference image to a fill, it is sent too.	Αν προσθέσετε εικόνα αναφοράς σε μια συμπλήρωση, αποστέλλεται κι αυτή.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Η επιλεγμένη περιοχή, η εικόνα γύρω της, η εικόνα αναφοράς και η περιγραφή αποστέλλονται στο {name} ({model}).
+	Reference: {name}	Αναφορά: {name}
