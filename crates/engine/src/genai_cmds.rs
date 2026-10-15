@@ -126,6 +126,72 @@ fn check_prompt_for(provider: &dyn ImageProvider, prompt: &str, cmd: &str) -> Re
     Ok(())
 }
 
+/// Largest reference file read.
+pub const MAX_REFERENCE_BYTES: u64 = 50 * 1024 * 1024;
+/// Longest side of the reference sent to a provider.
+pub const REFERENCE_SIDE: u32 = 1024;
+/// A reference whose long side is shorter than this is refused.
+#[cfg(not(target_arch = "wasm32"))]
+const MIN_REFERENCE_SIDE: u32 = 64;
+
+/// A reference image file as the providers get it: flattened onto white, 8-bit sRGB, long side at
+/// most `REFERENCE_SIDE` (never enlarged), encoded as an opaque RGB PNG.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_reference(path: &str) -> std::result::Result<Vec<u8>, String> {
+    let unreadable = |why: &dyn std::fmt::Display| format!("Couldn't read the reference image: {why}");
+    let len = std::fs::metadata(path).map_err(|e| unreadable(&e))?.len();
+    if len > MAX_REFERENCE_BYTES {
+        return Err(unreadable(&"the file is larger than 50 MB"));
+    }
+    let bytes = std::fs::read(path).map_err(|e| unreadable(&e))?;
+    let name = std::path::Path::new(path).file_name().map_or_else(|| "reference".into(), |n| n.to_string_lossy().into_owned());
+    let doc = photocraft_io::import(&name, &bytes).map_err(|e| unreadable(&e))?.document;
+    let bounds = doc.bounds();
+    let (w, h) = (bounds.width(), bounds.height());
+    if w.max(h) < MIN_REFERENCE_SIDE {
+        return Err("The reference image is too small".into());
+    }
+    let srgb = srgb_composite(&doc, bounds).map_err(|e| unreadable(&e))?;
+    let k = (f64::from(REFERENCE_SIDE) / f64::from(w.max(h))).min(1.0);
+    let (tw, th) = (((f64::from(w) * k).round() as u32).max(1), ((f64::from(h) * k).round() as u32).max(1));
+    let small = scaled(&srgb, bounds, tw, th);
+    let rgba = small.convert(PixelFormat::new(ColorMode::Rgb, SampleType::U8, true)).to_interleaved(Rect::from_xywh(0, 0, tw, th));
+    // Transparent parts become white: a cut-out subject reads cleanly.
+    let rgb: Vec<u8> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|&[r, g, b, a]| {
+            let a = u16::from(a);
+            [r, g, b].map(|c| ((u16::from(c) * a + 255 * (255 - a) + 127) / 255) as u8)
+        })
+        .collect();
+    let img = Image::from_u8(tw, th, ChannelLayout::Rgb, rgb).map_err(|e| unreadable(&e))?;
+    codecs::encode(&img, Format::Png, &Default::default()).map_err(|e| unreadable(&e))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn load_reference(_path: &str) -> std::result::Result<Vec<u8>, String> {
+    Err("reference images need the desktop app".into())
+}
+
+/// The `reference` param: `None` when absent; the loaded PNG and its file name otherwise. Checks the
+/// provider first so an unsupported provider fails before the file is touched.
+fn reference_param(p: &Value, provider: &dyn ImageProvider, cmd: &str) -> Result<Option<(Vec<u8>, String)>> {
+    let bad = |msg: String| EngineError::BadParams { cmd: cmd.into(), msg };
+    let path = match p.get("reference") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::String(s)) if !s.trim().is_empty() => s.trim().to_owned(),
+        Some(_) => return Err(bad("`reference` must be a file path".into())),
+    };
+    if !provider.supports_reference() {
+        return Err(bad(format!("{} can't use a reference image", provider.info().name)));
+    }
+    let png = load_reference(&path).map_err(bad)?;
+    let name = std::path::Path::new(&path).file_name().map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
+    Ok(Some((png, name)))
+}
+
 fn bad(msg: impl Into<String>) -> EngineError {
     EngineError::BadParams { cmd: FILL.into(), msg: msg.into() }
 }
@@ -539,6 +605,8 @@ pub(crate) struct Source {
     reference: Reference,
     /// The provider that made it, for Generate More.
     provider: String,
+    /// The file name of the reference image used, if any (Properties tooltip).
+    reference_name: Option<String>,
 }
 
 fn variations_param(p: &Value, key: &str) -> Result<usize> {
@@ -701,6 +769,9 @@ fn dump(request: &EditRequest, results: &[Vec<u8>], stats: &[String]) {
         }
         let _ = std::fs::write(dir.join("sent-image.png"), &request.image);
         let _ = std::fs::write(dir.join("sent-mask.png"), &request.mask);
+        if let Some(r) = &request.reference {
+            let _ = std::fs::write(dir.join("sent-reference.png"), r);
+        }
         let _ = std::fs::write(dir.join("prompt.txt"), &request.prompt);
         for (i, bytes) in results.iter().enumerate() {
             let ext = if bytes.starts_with(b"\x89PNG") { "png" } else { "jpg" };
@@ -880,6 +951,7 @@ fn fill(s: &mut Session, p: &Value) -> Result<Value> {
     let provider = chosen_provider(s, p, FILL, None)?;
     check_can_edit(provider.as_ref(), FILL)?;
     check_prompt_for(provider.as_ref(), &prompt, FILL)?;
+    let reference_png = reference_param(p, provider.as_ref(), FILL)?;
     let provider_id = provider.info().id.to_owned();
     let st = s.active().ok_or(EngineError::NoDocument)?;
     let doc = st.doc.clone();
@@ -903,7 +975,7 @@ fn fill(s: &mut Session, p: &Value) -> Result<Value> {
                 mask,
                 prompt,
                 size: ImageSize::for_long_side(w.max(h)),
-                reference: None,
+                reference: reference_png.as_ref().map(|(png, _)| png.clone()),
                 cancel: photocraft_genai::CancelToken::default(),
             };
             let results = request_all(ctx, provider.as_ref(), &request, count)?;
@@ -911,7 +983,8 @@ fn fill(s: &mut Session, p: &Value) -> Result<Value> {
             let placed = place_all(&request, &results, area, &reference)?;
             ctx.check()?;
             let mask = blended_mask(&selection, selected, canvas);
-            let source = Source { prompt: request.prompt.clone(), area, request, reference, provider: provider_id };
+            let source =
+                Source { prompt: request.prompt.clone(), area, request, reference, provider: provider_id, reference_name: reference_png.map(|(_, name)| name) };
             Ok((placed, mask, source))
         },
         move |s, (placed, mask, source)| {
@@ -967,6 +1040,11 @@ impl Session {
     pub fn generative_provider(&self, id: LayerId) -> Option<&str> {
         self.genai_sources.get(&id).map(|s| s.provider.as_str())
     }
+
+    /// The file name of the reference image a generative layer was made with.
+    pub fn generative_reference_name(&self, id: LayerId) -> Option<&str> {
+        self.genai_sources.get(&id).and_then(|s| s.reference_name.as_deref())
+    }
 }
 
 fn select_enabled(s: &Session) -> std::result::Result<(), String> {
@@ -1005,14 +1083,23 @@ fn more(s: &mut Session, p: &Value) -> Result<Value> {
     let provider = chosen_provider(s, p, MORE, Some(&source.provider))?;
     check_can_edit(provider.as_ref(), MORE)?;
     check_prompt_for(provider.as_ref(), &source.prompt, MORE)?;
+    // The reference loaded for the fill is reused (never re-read); a `reference` param replaces it
+    // for this request only.
+    let mut request = source.request.clone();
+    if let Some((png, _)) = reference_param(p, provider.as_ref(), MORE)? {
+        request.reference = Some(png);
+    }
+    if request.reference.is_some() && !provider.supports_reference() {
+        return Err(bad(format!("{} can't use a reference image", provider.info().name)));
+    }
     crate::jobs::run(
         s,
         LABEL,
         true,
         move |ctx| {
-            let results = request_all(ctx, provider.as_ref(), &source.request, count)?;
+            let results = request_all(ctx, provider.as_ref(), &request, count)?;
             ctx.progress(0.9, "Placing the results");
-            place_all(&source.request, &results, source.area, &source.reference)
+            place_all(&request, &results, source.area, &source.reference)
         },
         move |s, placed| {
             let ids = s.edit("Generate More", |doc, _| {
@@ -1039,7 +1126,7 @@ pub fn specs() -> Vec<CommandSpec> {
             label: "Generative Fill…",
             menu: &["Edit"],
             shortcut: None,
-            params: r#"{"prompt":str?,"variations":1..4=3,"provider":str?} fills the selection through the configured provider: a new group masked by the selection with a softened edge, as Photoshop's generative layers are, holds one layer per variation, the first showing. An empty prompt continues the surrounding image through it. Sends the selected area and its surroundings to that provider, once per variation. "provider" names a configured provider (default: the one chosen in Generative AI Settings)."#,
+            params: r#"{"prompt":str?,"variations":1..4=3,"provider":str?,"reference":str?} fills the selection through the configured provider: a new group masked by the selection with a softened edge, as Photoshop's generative layers are, holds one layer per variation, the first showing. An empty prompt continues the surrounding image through it. Sends the selected area and its surroundings to that provider, once per variation. "provider" names a configured provider (default: the one chosen in Generative AI Settings). "reference" is an image file of a subject to add (OpenAI and Gemini only); it is sent with the request."#,
             enabled: fill_enabled,
             run: fill,
             journal: true,
@@ -1059,7 +1146,7 @@ pub fn specs() -> Vec<CommandSpec> {
             label: "Generate More",
             menu: &[],
             shortcut: None,
-            params: r#"{"count":1..4=3,"layer":id?,"provider":str?} asks the provider for more variations of the active generative layer, with the same image, mask and prompt, and adds them to it. Without "provider" it asks the provider that made the layer. Sends that area to the provider again."#,
+            params: r#"{"count":1..4=3,"layer":id?,"provider":str?,"reference":str?} asks the provider for more variations of the active generative layer, with the same image, mask and prompt, and adds them to it. Without "provider" it asks the provider that made the layer. Without "reference" it reuses the layer's. Sends that area to the provider again."#,
             enabled: more_enabled,
             run: more,
             journal: true,

@@ -1044,3 +1044,129 @@ fn a_selection_too_large_for_the_soft_edge_keeps_its_own() {
     // A few planes of this many f32s each stay well under a GiB.
     const { assert!(MAX_EDGE_PIXELS <= 1 << 25) };
 }
+
+/// Like `Fake` but accepts references.
+struct Refs {
+    inner: Arc<Fake>,
+}
+
+impl ImageProvider for Refs {
+    fn info(&self) -> ProviderInfo {
+        ProviderInfo { id: "refs", name: "Refs", model: "r".into(), host: "example.invalid" }
+    }
+    fn capabilities(&self) -> Capabilities {
+        self.inner.capabilities()
+    }
+    fn supports_reference(&self) -> bool {
+        true
+    }
+    fn edit(&self, r: &EditRequest) -> photocraft_genai::Result<GeneratedImage> {
+        self.inner.edit(r)
+    }
+}
+
+/// A `w`×`h` PNG of one colour in its own folder under the temp dir (one folder per file name, so
+/// tests never share a file).
+fn temp_png(name: &str, w: u32, h: u32, rgba: [u8; 4]) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-{}", std::process::id(), name.replace(['.', ' '], "_")));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(name);
+    let px: Vec<u8> = (0..w * h).flat_map(|_| rgba).collect();
+    let img = Image::from_u8(w, h, ChannelLayout::Rgba, px).unwrap();
+    std::fs::write(&path, codecs::encode(&img, Format::Png, &Default::default()).unwrap()).unwrap();
+    path
+}
+
+fn with_refs(s: &mut Session) -> Arc<Fake> {
+    let fake = Fake::new([0, 128, 0]);
+    s.set_image_provider(Some(Arc::new(Refs { inner: fake.clone() })));
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    fake
+}
+
+#[test]
+fn a_reference_reaches_the_provider_as_a_small_png() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let path = temp_png("sam.png", 300, 200, [200, 100, 50, 255]);
+    s.execute(FILL, json!({"prompt": "add sam", "variations": 1, "reference": path.to_string_lossy()})).unwrap();
+    let sent = fake.sent.lock().unwrap();
+    let r = sent[0].reference.as_ref().expect("reference sent");
+    assert_eq!(photocraft_genai::png_size(r), Some((300, 200)), "small images keep their size");
+}
+
+#[test]
+fn a_large_reference_is_scaled_to_1024() {
+    let png = load_reference(&temp_png("big.png", 4000, 3000, [10, 20, 30, 255]).to_string_lossy()).unwrap();
+    assert_eq!(photocraft_genai::png_size(&png), Some((1024, 768)));
+}
+
+#[test]
+fn a_transparent_reference_is_flattened_onto_white() {
+    let png = load_reference(&temp_png("cutout.png", 100, 100, [0, 0, 0, 0]).to_string_lossy()).unwrap();
+    let img = codecs::decode(&png).unwrap().convert(ChannelLayout::Rgb, CodecSample::U8);
+    assert!(img.data().iter().all(|&v| v == 255), "transparent → white");
+}
+
+#[test]
+fn a_reference_path_with_spaces_and_accents_loads() {
+    assert!(load_reference(&temp_png("Sam Ö photo.png", 80, 80, [1, 2, 3, 255]).to_string_lossy()).is_ok());
+}
+
+#[test]
+fn reference_errors_are_clear_and_nothing_is_sent() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let missing = s.execute(FILL, json!({"prompt": "x", "reference": "C:/no/such/file.png"})).unwrap_err().to_string();
+    assert!(missing.contains("Couldn't read the reference image"), "{missing}");
+    let junk = std::env::temp_dir().join(format!("pc-ref-junk-{}.png", std::process::id()));
+    std::fs::write(&junk, b"not an image").unwrap();
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": junk.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("Couldn't read the reference image"), "{e}");
+    let tiny = temp_png("tiny.png", 40, 30, [5, 5, 5, 255]);
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": tiny.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("too small"), "{e}");
+    assert!(s.execute(FILL, json!({"prompt": "x", "reference": 7})).is_err());
+    assert!(fake.sent.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_provider_without_reference_support_is_refused_before_any_job() {
+    let mut s = session(64, 64);
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    let fake = Fake::new([1, 2, 3]);
+    s.set_image_provider(Some(fake.clone()));
+    let history = s.active().unwrap().history.past_len();
+    let path = temp_png("p.png", 100, 100, [9, 9, 9, 255]);
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": path.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("can't use a reference image"), "{e}");
+    assert!(fake.sent.lock().unwrap().is_empty());
+    assert_eq!(s.active().unwrap().history.past_len(), history);
+}
+
+#[test]
+fn generate_more_reuses_the_reference_after_the_file_is_gone() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let path = temp_png("gone.png", 120, 90, [50, 60, 70, 255]);
+    let r = s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": path.to_string_lossy()})).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    s.execute(MORE, json!({"layer": r["layer"], "count": 1})).unwrap();
+    let sent = fake.sent.lock().unwrap();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[1].reference, sent[0].reference, "same bytes, no re-read");
+    let layer = photocraft_doc::LayerId(r["layer"].as_u64().unwrap());
+    assert_eq!(s.generative_reference_name(layer), Some("gone.png"));
+}
+
+#[test]
+fn generate_more_can_take_another_reference() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let a = temp_png("a.png", 100, 100, [1, 1, 1, 255]);
+    let b = temp_png("b.png", 200, 100, [2, 2, 2, 255]);
+    let r = s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": a.to_string_lossy()})).unwrap();
+    s.execute(MORE, json!({"layer": r["layer"], "count": 1, "reference": b.to_string_lossy()})).unwrap();
+    let sent = fake.sent.lock().unwrap();
+    assert_eq!(photocraft_genai::png_size(sent[1].reference.as_ref().unwrap()), Some((200, 100)));
+}
