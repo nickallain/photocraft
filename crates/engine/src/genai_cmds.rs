@@ -898,7 +898,14 @@ fn fill(s: &mut Session, p: &Value) -> Result<Value> {
             ctx.progress(0.05, "Preparing image");
             let (image, mask, reference) = request_images(&scaled(&srgb_composite(&doc, area)?, area, w, h), &selection, area, w, h)?;
             ctx.check()?;
-            let request = EditRequest { image, mask, prompt, size: ImageSize::for_long_side(w.max(h)), cancel: photocraft_genai::CancelToken::default() };
+            let request = EditRequest {
+                image,
+                mask,
+                prompt,
+                size: ImageSize::for_long_side(w.max(h)),
+                reference: None,
+                cancel: photocraft_genai::CancelToken::default(),
+            };
             let results = request_all(ctx, provider.as_ref(), &request, count)?;
             ctx.progress(0.9, "Placing the results");
             let placed = place_all(&request, &results, area, &reference)?;

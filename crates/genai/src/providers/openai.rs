@@ -116,6 +116,7 @@ impl ImageProvider for OpenAi {
         MIN_LONG as u32
     }
     fn edit(&self, r: &EditRequest) -> Result<GeneratedImage> {
+        crate::providers::common::check_reference(self, r)?;
         check_prompt(&r.prompt, false)?;
         let (w, h) = same_size(&r.image, &r.mask)?;
         r.cancel.check()?;

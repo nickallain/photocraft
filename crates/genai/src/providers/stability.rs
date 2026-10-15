@@ -70,6 +70,7 @@ impl ImageProvider for Stability {
         512
     }
     fn edit(&self, r: &EditRequest) -> Result<GeneratedImage> {
+        crate::providers::common::check_reference(self, r)?;
         check_prompt(&r.prompt, false)?;
         same_size(&r.image, &r.mask)?;
         r.cancel.check()?;
@@ -104,6 +105,15 @@ mod tests {
     fn provider(replies: Vec<Result<HttpResponse>>) -> (std::sync::Arc<dyn ImageProvider>, std::sync::Arc<FakeHttp>) {
         let http = FakeHttp::new(replies);
         ((SPEC.build)("", Credentials::api_key(ApiKey::new(SECRET).unwrap()), http.clone()).unwrap(), http)
+    }
+
+    #[test]
+    fn a_reference_is_refused_before_sending() {
+        let (p, http) = provider(vec![]);
+        let mut r = edit_request("x", 8, 8);
+        r.reference = Some(png(4, 4));
+        assert!(matches!(p.edit(&r), Err(GenError::Unsupported(_))));
+        assert!(http.requests().is_empty());
     }
 
     fn part(r: &crate::HttpRequest, name: &str) -> Option<Vec<u8>> {

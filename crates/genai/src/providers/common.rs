@@ -22,6 +22,14 @@ pub fn prompt_or_description(prompt: &str) -> &str {
     if p.is_empty() { CONTINUE_DESCRIPTION } else { p }
 }
 
+/// Refuses a request carrying a reference the provider can't use, before anything is sent.
+pub fn check_reference(provider: &dyn crate::ImageProvider, r: &crate::EditRequest) -> Result<()> {
+    if r.reference.is_some() && !provider.supports_reference() {
+        return Err(GenError::Unsupported(provider.info().name));
+    }
+    Ok(())
+}
+
 pub fn b64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
@@ -132,6 +140,25 @@ mod tests {
     use crate::testing::*;
     use crate::{ApiKey, Credentials};
     use serde_json::json;
+
+    #[test]
+    fn a_reference_is_refused_by_a_provider_that_cannot_use_one() {
+        use crate::ImageProvider as _;
+        struct Plain;
+        impl crate::ImageProvider for Plain {
+            fn info(&self) -> crate::ProviderInfo {
+                crate::ProviderInfo { id: "plain", name: "Plain", model: "m".into(), host: "example.invalid" }
+            }
+            fn capabilities(&self) -> crate::Capabilities {
+                crate::Capabilities { generate: false, edit: true, variations: false }
+            }
+        }
+        let mut r = edit_request("x", 8, 8);
+        assert!(check_reference(&Plain, &r).is_ok());
+        r.reference = Some(png(4, 4));
+        assert_eq!(check_reference(&Plain, &r), Err(GenError::Unsupported("Plain")));
+        assert!(!Plain.supports_reference());
+    }
 
     fn creds() -> Credentials {
         Credentials::api_key(ApiKey::new(SECRET).unwrap())

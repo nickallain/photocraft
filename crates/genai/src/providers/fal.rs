@@ -97,6 +97,7 @@ impl ImageProvider for Fal {
         Capabilities { generate: false, edit: true, variations: false }
     }
     fn edit(&self, r: &EditRequest) -> Result<GeneratedImage> {
+        crate::providers::common::check_reference(self, r)?;
         check_prompt(&r.prompt, false)?;
         same_size(&r.image, &r.mask)?;
         r.cancel.check()?;

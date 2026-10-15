@@ -144,6 +144,7 @@ impl<T: HttpTransport> ImageProvider for GeminiProvider<T> {
     }
 
     fn edit(&self, r: &EditRequest) -> Result<GeneratedImage> {
+        crate::providers::common::check_reference(self, r)?;
         crate::check_prompt(&r.prompt, false)?;
         let size = crate::png_size(&r.image).ok_or_else(|| GenError::Invalid("the image must be a PNG".into()))?;
         if crate::png_size(&r.mask) != Some(size) {
@@ -302,7 +303,7 @@ mod tests {
     }
 
     fn edit(prompt: &str, w: u32, h: u32) -> EditRequest {
-        EditRequest { image: png_of(w, h), mask: png_of(w, h), prompt: prompt.into(), size: ImageSize::Medium, cancel: CancelToken::default() }
+        EditRequest { image: png_of(w, h), mask: png_of(w, h), prompt: prompt.into(), size: ImageSize::Medium, reference: None, cancel: CancelToken::default() }
     }
 
     #[test]
