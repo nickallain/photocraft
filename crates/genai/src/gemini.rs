@@ -177,28 +177,21 @@ impl<T: HttpTransport> ImageProvider for GeminiProvider<T> {
     }
 }
 
+/// How new content must sit in the scene; shared by every fill that adds something.
+const BELONG: &str = "Make it belong to the scene: the right size for its place in the perspective, lit from the same                       direction, casting and receiving shadows and reflections, and interacting with whatever touches it.                       Around the new content, continue the background and anything that crosses the placeholder's edge.";
+
 /// The instruction that stands in for a mask parameter. The selected area arrives blurred out (a
 /// smooth placeholder made of the colours around it), so the model can't copy what was there and
 /// has no flat shape to mistake for an object. An empty prompt means "what would be there without
 /// whatever stood in it": the background and anything crossing the edge carry on through it.
 pub fn fill_instruction(prompt: &str, with_reference: bool) -> String {
     let what = if prompt.trim().is_empty() && with_reference {
-        "Replace the placeholder with: add the subject from the last image. Make it belong to the scene: the right size          for its place in the perspective, lit from the same direction, casting and receiving shadows and reflections,          and interacting with whatever touches it. Around the new content, continue the background and anything that          crosses the placeholder's edge."
-            .to_owned()
+        format!("Replace the placeholder with: add the subject from the last image. {BELONG}")
     } else if prompt.trim().is_empty() {
-        "Replace the placeholder with what would be there if whatever stood in it had never existed: continue the \
-         background, surfaces, textures and lighting from around it, and carry on anything that crosses its edge (lines, \
-         edges, horizon, patterns, objects partly outside it) the way it would plausibly continue. Do not add a new \
-         object, light or shape that nothing around it suggests."
+        "Replace the placeholder with what would be there if whatever stood in it had never existed: continue the          background, surfaces, textures and lighting from around it, and carry on anything that crosses its edge (lines,          edges, horizon, patterns, objects partly outside it) the way it would plausibly continue. Do not add a new          object, light or shape that nothing around it suggests."
             .to_owned()
     } else {
-        format!(
-            "Replace the placeholder with: {}. Make it belong to the scene: the right size for its place in the \
-             perspective, lit from the same direction, casting and receiving shadows and reflections, and interacting \
-             with whatever touches it. Around the new content, continue the background and anything that crosses the \
-             placeholder's edge.",
-            prompt.trim().trim_end_matches('.')
-        )
+        format!("Replace the placeholder with: {}. {BELONG}", prompt.trim().trim_end_matches('.'))
     };
     let reference = if with_reference { format!(" {REFERENCE_LINE}") } else { String::new() };
     format!(
@@ -373,6 +366,22 @@ mod tests {
         let t = fill_instruction("", true);
         assert!(t.contains("add the subject from the last image") && t.contains(REFERENCE_LINE), "{t}");
         assert!(!fill_instruction("", false).contains(REFERENCE_LINE));
+    }
+
+    #[test]
+    fn instructions_have_no_stray_spaces_and_the_plain_ones_are_unchanged() {
+        for prompt in ["", "a boat"] {
+            for with_reference in [false, true] {
+                let t = fill_instruction(prompt, with_reference);
+                assert!(!t.contains("  "), "{prompt:?}/{with_reference}: {t}");
+            }
+        }
+        assert_eq!(
+            fill_instruction("a boat", false),
+            "Edit the first image. The second image is a mask the same size: white marks an area of the first image that has been blurred out as a placeholder, black the area to keep. The blur is not part of the scene: replace all of it with sharp, detailed content that has the same focus, noise and grain as its surroundings. Before editing, study the whole first image: what the scene is, where the light comes from, the perspective and depth, and what runs up to the placeholder. Replace the placeholder with: a boat. Make it belong to the scene: the right size for its place in the perspective, lit from the same direction, casting and receiving shadows and reflections, and interacting with whatever touches it. Around the new content, continue the background and anything that crosses the placeholder's edge. Keep everything in the black area, the framing, the scale and the position of every object exactly as they are. Reply with the edited image only."
+        );
+        let empty = fill_instruction("", false);
+        assert!(empty.contains("object, light or shape that nothing around it suggests. Keep everything"), "{empty}");
     }
 
     #[test]
