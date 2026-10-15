@@ -1,4 +1,4 @@
-//! Ideogram 3.0 Inpaint (`/v1/ideogram-v3/inpaint`): multipart, **black = edit**, the reply
+//! Ideogram 3.0 Inpaint (`/v2/image/inpaint/ideogram-3`): multipart, **black = edit**, the reply
 //! carries a temporary URL on ideogram.ai. It needs a prompt.
 
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use crate::{
 pub const ID: &str = "ideogram-v3";
 const NAME: &str = "Ideogram 3.0 Inpaint";
 const HOST: &str = "api.ideogram.ai";
-pub(crate) const ENDPOINT: &str = "https://api.ideogram.ai/v1/ideogram-v3/inpaint";
+pub(crate) const ENDPOINT: &str = "https://api.ideogram.ai/v2/image/inpaint/ideogram-3";
 pub const RESULT_HOSTS: &[&str] = &["ideogram.ai"];
 const MODELS: &[(&str, &str)] = &[("V_3", "Ideogram 3.0")];
 
@@ -113,6 +113,15 @@ mod tests {
         assert_eq!((m[0], m[7 * 4]), (0, 255), "Ideogram: black = edit");
         assert_eq!((sent[1].method, sent[1].url.as_str()), (Method::Get, "https://ideogram.ai/api/images/ephemeral/abc.png"));
         assert!(header(&sent[1], "api-key").is_none(), "the key isn't sent with the download");
+    }
+
+    #[test]
+    fn uses_ideograms_current_inpaint_endpoint() {
+        assert_eq!(ENDPOINT, "https://api.ideogram.ai/v2/image/inpaint/ideogram-3");
+        let reply = json_reply(200, json!({"data": [{"url": "https://ideogram.ai/api/images/ephemeral/a.png", "is_image_safe": true}]}));
+        let (p, http) = provider(vec![reply, bytes_reply(200, "image/png", png(8, 8))]);
+        p.edit(&edit_request("a lighthouse", 8, 8)).unwrap();
+        assert_eq!(http.requests()[0].url, "https://api.ideogram.ai/v2/image/inpaint/ideogram-3");
     }
 
     #[test]
