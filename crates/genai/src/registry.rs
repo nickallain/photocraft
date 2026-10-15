@@ -24,6 +24,8 @@ pub struct ProviderSpec {
     pub key_page: &'static str,
     /// An extra sentence for the privacy text, or "".
     pub note: &'static str,
+    /// Whether fills can use a reference image (with the default model), for the privacy text.
+    pub supports_reference: bool,
     pub build: BuildFn,
 }
 
@@ -74,10 +76,13 @@ mod tests {
             assert_eq!(built.info().id, p.id, "the session keys providers by this id");
             assert!(p.models.iter().any(|m| m.0 == built.info().model), "{}: an empty model picks a listed one", p.id);
             assert!(built.capabilities().edit, "{}", p.id);
+            assert_eq!(p.supports_reference, built.supports_reference(), "{}: the spec says what its default model does", p.id);
             assert!((p.build)("../etc", full(p), FakeHttp::new(vec![])).is_err(), "{}", p.id);
             assert!((p.build)("", Credentials::default(), FakeHttp::new(vec![])).is_err(), "{}: missing credentials", p.id);
             assert_eq!(spec(p.id).map(|s| s.id), Some(p.id));
         }
         assert!(spec("nope").is_none());
+        let refs: Vec<&str> = providers().iter().filter(|p| p.supports_reference).map(|p| p.id).collect();
+        assert_eq!(refs, ["gemini", "openai"]);
     }
 }

@@ -42,6 +42,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: &[API_KEY_FIELD],
     key_page: "https://fal.ai/dashboard/keys",
     note: "",
+    supports_reference: false,
     build,
 };
 

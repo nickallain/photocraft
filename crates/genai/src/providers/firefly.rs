@@ -57,6 +57,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: FIELDS,
     key_page: "https://developer.adobe.com/console",
     note: "",
+    supports_reference: false,
     build,
 };
 

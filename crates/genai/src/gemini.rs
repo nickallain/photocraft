@@ -45,6 +45,7 @@ pub const SPEC: crate::ProviderSpec = crate::ProviderSpec {
     fields: &[crate::API_KEY_FIELD],
     key_page: "https://aistudio.google.com/apikey",
     note: "Results carry Google's SynthID watermark.",
+    supports_reference: true,
     build,
 };
 

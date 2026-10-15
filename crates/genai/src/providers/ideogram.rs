@@ -36,6 +36,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: &[API_KEY_FIELD],
     key_page: "https://ideogram.ai/manage-api",
     note: "",
+    supports_reference: false,
     build,
 };
 

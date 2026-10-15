@@ -43,6 +43,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: &[API_KEY_FIELD],
     key_page: "https://replicate.com/account/api-tokens",
     note: "",
+    supports_reference: false,
     build,
 };
 

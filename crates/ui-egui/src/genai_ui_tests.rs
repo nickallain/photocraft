@@ -550,7 +550,9 @@ fn removing_the_reference_clears_it() {
     let (mut app, _) = configured(&store, &["openai"]);
     let id = open_prompt(&mut app);
     let mut f = prompt_fields(&app, id);
-    f.insert("reference".into(), json!(temp_ref("x.png")));
+    let path = temp_ref("x.png");
+    f.insert("reference".into(), json!(path));
+    app.genai.last_reference = Some(path);
     clear_reference(&mut app, &mut f);
     assert_eq!(f["reference"], "");
     assert!(app.genai.last_reference.is_none());
@@ -626,4 +628,51 @@ fn a_remembered_reference_is_dropped_when_no_provider_can_use_it() {
     assert_eq!(f["reference"], "", "Stability alone can't use it, and the row to remove it is hidden");
     f.insert("prompt".into(), json!("a lighthouse"));
     assert!(can_confirm(&app, &f));
+}
+
+#[test]
+fn the_set_up_dialog_says_a_reference_is_sent_for_providers_that_take_one() {
+    let line = "If you add a reference image to a fill, it is sent too.";
+    // Nothing is set up yet: the user reads this before saving.
+    let openai = photocraft_genai::spec("openai").unwrap();
+    assert!(privacy_lines(openai).iter().any(|l| l == line));
+    let gemini = photocraft_genai::spec("gemini").unwrap();
+    assert!(privacy_lines(gemini).iter().any(|l| l == line));
+    let stability = photocraft_genai::spec("stability").unwrap();
+    assert!(!privacy_lines(stability).iter().any(|l| l == line));
+}
+
+#[test]
+fn a_picked_reference_is_read_once() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    let path = temp_ref("once.png");
+    let (dialog, _) = crate::file_dialog::fake(vec![Some(crate::file_dialog::FileDialogAnswer::Paths(vec![path.clone()]))]);
+    app.services.file_dialog = Some(dialog);
+    let id = open_prompt(&mut app);
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&egui::Context::default(), None);
+    app.poll_file_dialog(&egui::Context::default(), None);
+    std::fs::remove_file(&path).unwrap();
+    assert!(reference_thumb(&mut app, &egui::Context::default(), &path).is_some(), "the thumbnail comes from what the pick read");
+}
+
+#[test]
+fn add_reference_reports_errors_but_not_a_cancel() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    open_prompt(&mut app);
+    // No dialog service: ask_file answers "cancelled", which is not reported.
+    add_reference_clicked(&mut app);
+    assert_eq!(app.ui.status, "");
+    assert!(!app.ui.status_error);
+    // A file dialog already open is a real error.
+    let (dialog, _) = crate::file_dialog::fake(vec![None]);
+    app.services.file_dialog = Some(dialog);
+    add_reference_clicked(&mut app);
+    add_reference_clicked(&mut app);
+    assert!(app.ui.status.contains("already open"), "{}", app.ui.status);
+    assert!(app.ui.status_error);
 }

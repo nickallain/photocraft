@@ -35,6 +35,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: &[API_KEY_FIELD],
     key_page: "https://platform.stability.ai/account/keys",
     note: "",
+    supports_reference: false,
     build,
 };
 

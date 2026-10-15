@@ -42,6 +42,8 @@ pub struct Runtime {
     pub(crate) last_reference: Option<String>,
     /// The reference row's thumbnail: (path, texture).
     reference_thumb: Option<(String, egui::TextureHandle)>,
+    /// The reference as the pick read it (path, PNG bytes), so the thumbnail doesn't read it again.
+    reference_png: Option<(String, Vec<u8>)>,
     /// A reference path whose thumbnail couldn't be made, so it isn't retried every frame.
     reference_thumb_failed: Option<String>,
 }
@@ -284,7 +286,8 @@ pub(crate) fn pick_reference(app: &mut PhotocraftApp, dialog: u64) -> Result<Val
             _ => return Err(tl!("Reference images need the desktop app.").to_string()),
         };
         // Load once now so a bad file is reported at once (and the thumbnail can be made).
-        photocraft_engine::genai_cmds::load_reference(&path)?;
+        let png = photocraft_engine::genai_cmds::load_reference(&path)?;
+        app.genai.reference_png = Some((path.clone(), png));
         if let Some(d) = app.ui.dialogs.iter_mut().find(|d| d.id == dialog) {
             d.fields.insert("reference".into(), json!(path));
         }
@@ -297,7 +300,19 @@ pub(crate) fn clear_reference(app: &mut PhotocraftApp, f: &mut Map<String, Value
     f.insert("reference".into(), json!(""));
     app.genai.last_reference = None;
     app.genai.reference_thumb = None;
+    app.genai.reference_png = None;
     app.genai.reference_thumb_failed = None;
+}
+
+/// Add reference… clicked: open the picker for the prompt dialog. A cancel is not reported.
+pub(crate) fn add_reference_clicked(app: &mut PhotocraftApp) {
+    let Some(id) = app.ui.dialogs.iter().find(|d| d.fields.contains_key(PROMPT_MARK)).map(|d| d.id) else { return };
+    if let Err(e) = pick_reference(app, id)
+        && e != crate::file_dialog::CANCELLED
+    {
+        app.ui.status = e;
+        app.ui.status_error = true;
+    }
 }
 
 fn chosen_reference(f: &Map<String, Value>) -> Option<&str> {
@@ -315,7 +330,12 @@ fn reference_thumb(app: &mut PhotocraftApp, ctx: &egui::Context, path: &str) -> 
     if app.genai.reference_thumb_failed.as_deref() == Some(path) {
         return None;
     }
-    let img = photocraft_engine::genai_cmds::load_reference(path).ok().and_then(|png| photocraft_codecs::decode(&png).ok()).and_then(|img| {
+    // The bytes the pick read when they are for this path; otherwise (a remembered reference) read it.
+    let png = match app.genai.reference_png.take() {
+        Some((p, png)) if p == path => Some(png),
+        _ => photocraft_engine::genai_cmds::load_reference(path).ok(),
+    };
+    let img = png.and_then(|png| photocraft_codecs::decode(&png).ok()).and_then(|img| {
         let size = [usize::try_from(img.width()).ok()?, usize::try_from(img.height()).ok()?];
         let rgba = img.to_rgba8();
         (rgba.len() == size[0] * size[1] * 4).then(|| egui::ColorImage::from_rgba_unmultiplied(size, &rgba))
@@ -380,11 +400,8 @@ fn prompt_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, V
             ui.label(tl!("Reference"));
             match chosen_reference(f).map(str::to_owned) {
                 None => {
-                    if crate::widgets::secondary_button(ui, tl!("Add reference…"), 0.0).clicked()
-                        && let Some(id) = app.ui.dialogs.iter().find(|d| d.fields.contains_key(PROMPT_MARK)).map(|d| d.id)
-                        && let Err(e) = pick_reference(app, id)
-                    {
-                        app.ui.status = e;
+                    if crate::widgets::secondary_button(ui, tl!("Add reference…"), 0.0).clicked() {
+                        add_reference_clicked(app);
                     }
                 }
                 Some(path) => {
@@ -519,25 +536,31 @@ fn provider_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String,
     crate::widgets::hairline(ui);
     ui.add_space(6.0);
     ui.label(egui::RichText::new(tl!("What is sent, and to whom")).font(crate::theme::semibold(12.5)).color(t.text));
-    faint(
-        ui,
-        &crate::i18n::fmt(
-            tl!(
-                "Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account."
-            ),
-            &[("name", spec.name), ("host", spec.host)],
+    for line in privacy_lines(spec) {
+        faint(ui, &line);
+    }
+}
+
+/// The provider dialog's "What is sent, and to whom" text. Mentions the reference image for a
+/// provider that can use one, whether or not it is set up yet (the text is read before saving).
+pub(crate) fn privacy_lines(spec: &photocraft_genai::ProviderSpec) -> Vec<String> {
+    let mut lines = vec![crate::i18n::fmt(
+        tl!(
+            "Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account."
         ),
-    );
-    if app.session.image_provider_by_id(spec.id).is_some_and(|p| p.supports_reference()) {
-        faint(ui, tl!("If you add a reference image to a fill, it is sent too."));
+        &[("name", spec.name), ("host", spec.host)],
+    )];
+    if spec.supports_reference {
+        lines.push(tl!("If you add a reference image to a fill, it is sent too.").to_owned());
     }
     if !spec.result_hosts.is_empty() {
         let hosts = spec.result_hosts.iter().map(|h| h.trim_start_matches('.')).collect::<Vec<_>>().join(", ");
-        faint(ui, &crate::i18n::fmt(tl!("Results are downloaded from {hosts}."), &[("hosts", &hosts)]));
+        lines.push(crate::i18n::fmt(tl!("Results are downloaded from {hosts}."), &[("hosts", &hosts)]));
     }
     if !spec.note.is_empty() {
-        faint(ui, tl!(spec.note));
+        lines.push(tl!(spec.note).to_owned());
     }
+    lines
 }
 
 /// OK in the provider dialog: merge typed fields into the saved credentials, check the provider

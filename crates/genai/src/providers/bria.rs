@@ -45,6 +45,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: &[API_KEY_FIELD],
     key_page: "https://platform.bria.ai/console/account/api-keys",
     note: "",
+    supports_reference: false,
     build,
 };
 
