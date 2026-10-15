@@ -178,7 +178,9 @@ impl<T: HttpTransport> ImageProvider for GeminiProvider<T> {
 }
 
 /// How new content must sit in the scene; shared by every fill that adds something.
-const BELONG: &str = "Make it belong to the scene: the right size for its place in the perspective, lit from the same                       direction, casting and receiving shadows and reflections, and interacting with whatever touches it.                       Around the new content, continue the background and anything that crosses the placeholder's edge.";
+const BELONG: &str = "Make it belong to the scene: the right size for its place in the perspective, lit from the same \
+                      direction, casting and receiving shadows and reflections, and interacting with whatever touches it. \
+                      Around the new content, continue the background and anything that crosses the placeholder's edge.";
 
 /// The instruction that stands in for a mask parameter. The selected area arrives blurred out (a
 /// smooth placeholder made of the colours around it), so the model can't copy what was there and
@@ -188,7 +190,10 @@ pub fn fill_instruction(prompt: &str, with_reference: bool) -> String {
     let what = if prompt.trim().is_empty() && with_reference {
         format!("Replace the placeholder with: add the subject from the last image. {BELONG}")
     } else if prompt.trim().is_empty() {
-        "Replace the placeholder with what would be there if whatever stood in it had never existed: continue the          background, surfaces, textures and lighting from around it, and carry on anything that crosses its edge (lines,          edges, horizon, patterns, objects partly outside it) the way it would plausibly continue. Do not add a new          object, light or shape that nothing around it suggests."
+        "Replace the placeholder with what would be there if whatever stood in it had never existed: continue the \
+         background, surfaces, textures and lighting from around it, and carry on anything that crosses its edge (lines, \
+         edges, horizon, patterns, objects partly outside it) the way it would plausibly continue. Do not add a new \
+         object, light or shape that nothing around it suggests."
             .to_owned()
     } else {
         format!("Replace the placeholder with: {}. {BELONG}", prompt.trim().trim_end_matches('.'))
