@@ -3979,3 +3979,46 @@ layerLabel	No Color	Sem cor
 	There are too many sets: delete one first.	Há conjuntos demais: exclua um primeiro.
 	set name	nome do conjunto
 	{set} (modified)	{set} (modificado)
+# Generative Fill and Generative AI Settings (#41)
+	API key	Chave de API
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Descreva o que gerar na seleção ou deixe vazio para continuar a imagem através dela.
+	Fill the selection from a prompt	Preencher a seleção a partir de uma descrição
+	Generative AI	IA generativa
+	Generative AI Settings…	Configurações de IA generativa…
+	Generative AI needs the desktop app.	A IA generativa precisa do aplicativo para desktop.
+	Generative Fill uses {name} ({model}).	O preenchimento generativo usa {name} ({model}).
+	Generative Fill…	Preenchimento generativo…
+	No API key is saved for {provider}.	Nenhuma chave de API salva para {provider}.
+	Prompt (optional)	Descrição (opcional)
+	Provider	Provedor
+	Set up Generative Fill with your own API key	Configurar o preenchimento generativo com a sua própria chave de API
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	A área selecionada, a imagem ao redor e a descrição são enviadas para {name} ({model}).
+	What is sent, and to whom	O que é enviado, e para quem
+	the macOS Keychain	no Porta-Chaves do macOS
+	Windows Credential Manager	no Gerenciador de Credenciais do Windows
+	memory until PhotoCraft quits	na memória até o PhotoCraft ser fechado
+	Default for Generative Fill	Padrão para o preenchimento generativo
+	Set up	Configurado
+	Not set up	Não configurado
+	Needs credentials	Precisa de credenciais
+	Set Up…	Configurar…
+	Client ID	ID do cliente
+	Client secret	Segredo do cliente
+	Saved (leave empty to keep)	Salvo (deixe em branco para manter)
+	Paste here	Cole aqui
+	Get credentials from {name}	Obter credenciais de {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Nada é enviado até você executar o preenchimento generativo. A cada execução, o PhotoCraft envia a {name} ({host}) a área selecionada e a imagem ao redor, uma máscara da seleção e a sua descrição, com as suas credenciais. Valem os termos e a política de privacidade dele, e o uso é cobrado na sua conta.
+	Results are downloaded from {hosts}.	Os resultados são baixados de {hosts}.
+	Results carry Google's SynthID watermark.	Os resultados levam a marca-d’água SynthID do Google.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Cada Preenchimento generativo cria três variações, então envia três solicitações, cada uma cobrada na sua conta.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Suas credenciais ficam guardadas em {store}, nunca nos arquivos de configuração do PhotoCraft.
+	Enter every field for {provider}.	Preencha todos os campos de {provider}.
+	{provider} needs a prompt.	{provider} precisa de uma descrição.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	O preenchimento generativo usa {name} ({model}) por padrão; {count} provedores estão configurados.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Desativado. Configure um provedor com as suas próprias credenciais para usar o preenchimento generativo.
+# Generative Fill variations (#41)
+	Variations	Variações
+	No prompt: continues the image	Sem descrição: continua a imagem
+	Sends the same area and prompt to {name} again for three more.	Envia a mesma área e descrição para {name} de novo para mais três.
+	{name}, which made this layer, is no longer set up.	{name}, que criou esta camada, não está mais configurado.
+	Generate More	Gerar mais

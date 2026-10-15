@@ -1,0 +1,1065 @@
+//! Edit › Generative Fill (#41): fill the selection from a prompt through the image provider the
+//! app configured ([`Session::set_image_provider`]). With no provider the command is disabled and
+//! nothing is ever sent anywhere.
+//!
+//! The selection's bounds plus some surrounding context are rendered (all visible layers, in
+//! sRGB) and sent with a mask of the selection, once per variation (three by default, as
+//! Photoshop makes). The results land in a new group masked by the selection with a softened
+//! edge, as Photoshop's generative layers are (see [`blended_mask`]), one layer per variation with
+//! the first showing, so nothing under it changes and one undo removes it.
+//! `layer.generative.selectVariation` flips between them and `layer.generative.more` asks for
+//! more. The network calls run as one cancellable background job.
+//!
+//! Pixel interchange follows #730's approach (composite through the document's profile to sRGB,
+//! and back into the document's mode and depth on the way in).
+
+use std::sync::Arc;
+
+use photocraft_algo::selection as sel_algo;
+use photocraft_cms::{Builtin, Intent, Transform};
+use photocraft_codecs::{self as codecs, ChannelLayout, Format, Image, SampleType as CodecSample};
+use photocraft_color::{ColorMode, PixelFormat, SampleType};
+use photocraft_doc::{Document, Layer, LayerId, LayerMask};
+use photocraft_genai::{EditRequest, ImageProvider, ImageSize};
+use photocraft_geom::Rect;
+use photocraft_raster::Surface;
+use serde_json::{Value, json};
+
+use crate::commands::CommandSpec;
+use crate::{EngineError, Result, Session};
+
+pub const FILL: &str = "edit.generativeFill";
+pub const SELECT_VARIATION: &str = "layer.generative.selectVariation";
+pub const MORE: &str = "layer.generative.more";
+const LABEL: &str = "Generative Fill";
+/// Longest side sent to the provider; larger areas are scaled down for the request and the
+/// result is scaled back up.
+const UPLOAD_SIDE: u32 = 2048;
+const DEFAULT_VARIATIONS: usize = 3;
+const MAX_VARIATIONS: u64 = 4;
+/// Largest result accepted, per side.
+const RESULT_SIDE: u32 = 8192;
+
+/// A configured provider, shared with the background job that calls it.
+pub type SharedProvider = Arc<dyn ImageProvider>;
+
+/// The configured providers by id (the registry id, which is also their `info().id`), and the
+/// one Generative Fill uses when no `provider` param names another.
+#[derive(Default, Clone)]
+pub struct Providers {
+    by_id: std::collections::BTreeMap<String, SharedProvider>,
+    default: Option<String>,
+}
+
+impl Session {
+    /// Install one provider as the only and default one (or with `None`, remove all).
+    pub fn set_image_provider(&mut self, provider: Option<SharedProvider>) {
+        let mut by_id = std::collections::BTreeMap::new();
+        let default = provider.map(|p| {
+            let id = p.info().id.to_owned();
+            by_id.insert(id.clone(), p);
+            id
+        });
+        self.genai = Providers { by_id, default };
+    }
+
+    /// Install every configured provider. A `default` that isn't among them falls back to the
+    /// first by id.
+    pub fn set_image_providers(&mut self, by_id: std::collections::BTreeMap<String, SharedProvider>, default: Option<String>) {
+        let default = default.filter(|d| by_id.contains_key(d)).or_else(|| by_id.keys().next().cloned());
+        self.genai = Providers { by_id, default };
+    }
+
+    /// The default provider.
+    pub fn image_provider(&self) -> Option<&SharedProvider> {
+        self.genai.default.as_ref().and_then(|d| self.genai.by_id.get(d))
+    }
+
+    pub fn image_provider_by_id(&self, id: &str) -> Option<&SharedProvider> {
+        self.genai.by_id.get(id)
+    }
+
+    pub fn image_provider_ids(&self) -> Vec<String> {
+        self.genai.by_id.keys().cloned().collect()
+    }
+}
+
+/// The provider `p["provider"]` names, else `recorded` (the one that made a generative layer),
+/// else the default.
+fn chosen_provider(s: &Session, p: &Value, cmd: &str, recorded: Option<&str>) -> Result<SharedProvider> {
+    let bad = |msg: String| EngineError::BadParams { cmd: cmd.into(), msg };
+    match p.get("provider") {
+        None | Some(Value::Null) => match recorded {
+            Some(id) => s
+                .image_provider_by_id(id)
+                .cloned()
+                .ok_or_else(|| bad(format!("`{id}`, which made this layer, is no longer set up; pass `provider` to use another"))),
+            None => s.image_provider().cloned().ok_or_else(|| bad("no generative AI provider".into())),
+        },
+        Some(Value::String(id)) => s.image_provider_by_id(id).cloned().ok_or_else(|| bad(format!("no generative AI provider `{id}` is set up"))),
+        Some(_) => Err(bad("`provider` must be text".into())),
+    }
+}
+
+/// Menu enablement has no params: pass when some configured provider can fill selections.
+fn any_editor(s: &Session) -> std::result::Result<(), String> {
+    if s.genai.by_id.is_empty() {
+        return Err("set up a generative AI provider first (Generative AI Settings)".into());
+    }
+    if !s.genai.by_id.values().any(|p| p.capabilities().edit) {
+        return Err("none of the configured providers can fill selections".into());
+    }
+    Ok(())
+}
+
+fn check_can_edit(provider: &dyn ImageProvider, cmd: &str) -> Result<()> {
+    if !provider.capabilities().edit {
+        return Err(EngineError::BadParams { cmd: cmd.into(), msg: format!("{} can't fill selections", provider.info().name) });
+    }
+    Ok(())
+}
+
+fn check_prompt_for(provider: &dyn ImageProvider, prompt: &str, cmd: &str) -> Result<()> {
+    if provider.needs_prompt() && prompt.trim().is_empty() {
+        return Err(EngineError::BadParams { cmd: cmd.into(), msg: format!("{} needs a prompt", provider.info().name) });
+    }
+    Ok(())
+}
+
+fn bad(msg: impl Into<String>) -> EngineError {
+    EngineError::BadParams { cmd: FILL.into(), msg: msg.into() }
+}
+
+/// How much the context area is scaled for the upload: down to fit `UPLOAD_SIDE` and the
+/// provider's `max_side`, up to its `min_side` (never past `UPLOAD_SIDE`).
+pub(crate) fn upload_scale(long: f64, max_side: u32, min_side: u32) -> f64 {
+    let long = long.max(1.0);
+    let down = (f64::from(UPLOAD_SIDE.min(max_side).max(1)) / long).min(1.0);
+    let up = (f64::from(min_side) / long).min(f64::from(UPLOAD_SIDE) / long);
+    down.max(up)
+}
+
+fn other(e: impl std::fmt::Display) -> EngineError {
+    EngineError::Other(e.to_string())
+}
+
+fn fill_enabled(s: &Session) -> std::result::Result<(), String> {
+    any_editor(s)?;
+    let st = s.active().ok_or("no document open")?;
+    let sel = st.doc.selection.as_ref().ok_or("no selection")?;
+    if sel.content_bounds().intersect(&st.doc.bounds()).is_empty() {
+        return Err("the selection is empty".into());
+    }
+    Ok(())
+}
+
+/// The area sent: the selection's bounds with a margin of context around them, grown toward the
+/// provider's output shape so the result isn't stretched, inside the canvas.
+pub(crate) fn context_area(selected: Rect, canvas: Rect, aspect: impl Fn(u32, u32) -> (u32, u32)) -> Rect {
+    let side = selected.width().max(selected.height());
+    // Half the selection's size on each side: enough of the scene to read what runs into it.
+    let margin = (side / 2).clamp(64, 1024) as i32;
+    let r = Rect::new(selected.x0 - margin, selected.y0 - margin, selected.x1.saturating_add(margin), selected.y1.saturating_add(margin)).intersect(&canvas);
+    let (a, b) = aspect(r.width(), r.height());
+    if a == 0 || b == 0 || r.is_empty() {
+        return r;
+    }
+    let (w, h) = (u64::from(r.width()), u64::from(r.height()));
+    let (want_w, want_h) =
+        if w * u64::from(b) < h * u64::from(a) { ((h * u64::from(a)).div_ceil(u64::from(b)), h) } else { (w, (w * u64::from(b)).div_ceil(u64::from(a))) };
+    let grow = |lo: i32, hi: i32, want: u64, min: i32, max: i32| -> (i32, i32) {
+        let want = want.min((max - min) as u64) as i32;
+        let extra = want - (hi - lo);
+        let lo = (lo - extra / 2).max(min);
+        let hi = (lo + want).min(max);
+        (hi - want, hi)
+    };
+    let (x0, x1) = grow(r.x0, r.x1, want_w, canvas.x0, canvas.x1);
+    let (y0, y1) = grow(r.y0, r.y1, want_h, canvas.y0, canvas.y1);
+    Rect::new(x0, y0, x1, y1)
+}
+
+/// The visible image over `area`, in 8-bit sRGB.
+fn srgb_composite(doc: &Document, area: Rect) -> Result<Surface> {
+    let rgb = PixelFormat::new(ColorMode::Rgb, SampleType::U8, true);
+    let mut surface = Surface::new(rgb);
+    let mut data = Vec::new();
+    photocraft_compose::render_bands(doc, area, 0, |band| -> Result<()> {
+        data.clear();
+        data.resize(band.px.len() * 4, 0.0);
+        for (p, out) in band.px.iter().zip(data.as_chunks_mut::<4>().0.iter_mut()) {
+            photocraft_raster::from_rgba_into(&rgb, *p, out);
+        }
+        surface.write_region(band.rect, &data);
+        Ok(())
+    })?;
+    let t = Transform::new(&crate::color_cmds::composite_profile(doc), Builtin::Srgb.profile(), Intent::RelativeColorimetric, true).map_err(other)?;
+    Ok(crate::color_cmds::convert_surface(&surface, ColorMode::Rgb, rgb, &t))
+}
+
+/// sRGB pixels into the document's mode, depth and profile.
+fn to_document(doc: &Document, s: &Surface) -> Result<Surface> {
+    let fmt = PixelFormat::new(doc.mode, doc.depth, true);
+    let t = Transform::new(Builtin::Srgb.profile(), &crate::color_cmds::document_profile(doc), Intent::RelativeColorimetric, true).map_err(other)?;
+    let converted = crate::color_cmds::convert_surface(s, ColorMode::Rgb, fmt, &t);
+    Ok(if converted.format() == fmt { converted } else { converted.convert(fmt) })
+}
+
+/// `area` of `s` scaled to `w`×`h`, at the origin.
+fn scaled(s: &Surface, area: Rect, w: u32, h: u32) -> Surface {
+    let mut local = Surface::new(s.format());
+    local.write_region(Rect::from_xywh(0, 0, area.width(), area.height()), &s.read_region(area));
+    if (w, h) == (area.width(), area.height()) {
+        return local;
+    }
+    let sx = f64::from(w) / f64::from(area.width());
+    let sy = f64::from(h) / f64::from(area.height());
+    photocraft_algo::resample::resize_surface(&local, sx, sy, photocraft_algo::resample::Resample::Bicubic)
+}
+
+/// Largest mean difference (0..1) around the selection still treated as colour drift.
+const MAX_DRIFT: f64 = 0.25;
+/// Mean difference past which a pixel outside the selection counts as changed by the model, not
+/// just relit.
+const CHANGED: f32 = 0.25;
+/// Difference in fine detail past which a pixel outside the selection counts as changed.
+const DETAIL: f32 = 0.03;
+/// Levels in the fitted tone curves.
+const BINS: usize = 32;
+/// Grey that transparent parts of the image are shown on when sent.
+const HOLE: f32 = 128.0;
+
+fn encode_rgba(px: Vec<u8>, w: u32, h: u32) -> Result<Vec<u8>> {
+    let img = Image::from_u8(w, h, ChannelLayout::Rgba, px).map_err(other)?;
+    codecs::encode(&img, Format::Png, &Default::default()).map_err(other)
+}
+
+/// The image and mask sent, both `w`×`h`: `image` (sRGB, already scaled) with the selection
+/// replaced by a soft blur of the colours around it, and an opaque black-and-white PNG of the
+/// selection (white = fill). The provider never sees what is being replaced, as Photoshop's fill
+/// doesn't, so it can't paint it back. A flat grey hole was tried first: Gemini read it as an
+/// object (a grey box, a lamp) and drew it in.
+fn request_images(image: &Surface, sel: &Surface, area: Rect, w: u32, h: u32) -> Result<(Vec<u8>, Vec<u8>, Reference)> {
+    let r = Rect::from_xywh(0, 0, w, h);
+    let rgba = image.convert(PixelFormat::new(ColorMode::Rgb, SampleType::U8, true)).to_interleaved(r);
+    let coverage: Vec<f32> = scaled(sel, area, w, h).read_region(r).into_iter().map(|v| v.clamp(0.0, 1.0)).collect();
+    let mut original = Vec::with_capacity(coverage.len() * 3);
+    for px in rgba.as_chunks::<4>().0 {
+        let a = f32::from(px[3]) / 255.0;
+        // Transparent areas read as mid grey, not black.
+        for &c in &px[..3] {
+            original.push((f32::from(c) * a + HOLE * (1.0 - a)) / 255.0);
+        }
+    }
+    let fill = surroundings_fill(&original, &coverage, w as usize, h as usize);
+    let mut cleared = Vec::with_capacity(rgba.len());
+    let mut mask = Vec::with_capacity(rgba.len());
+    for (i, &m) in coverage.iter().enumerate() {
+        for c in 0..3 {
+            cleared.push(((original[i * 3 + c] * (1.0 - m) + fill[i * 3 + c] * m) * 255.0).round().clamp(0.0, 255.0) as u8);
+        }
+        cleared.push(255);
+        let g = (m * 255.0).round() as u8;
+        mask.extend_from_slice(&[g, g, g, 255]);
+    }
+    let reference = Reference { original, coverage, w, h };
+    Ok((encode_rgba(cleared, w, h)?, encode_rgba(mask, w, h)?, reference))
+}
+
+/// Colours for the selected area taken from around it (RGB, 0..1, `w`×`h`), by push-pull: the
+/// unselected pixels are averaged down a pyramid of halving sizes until every cell has some, then
+/// the averages are brought back up with bilinear interpolation, each level keeping its own known
+/// pixels. The result keeps the edge colours and turns smooth toward the middle, with no rings
+/// or steps a model could read as shapes.
+fn surroundings_fill(original: &[f32], coverage: &[f32], w: usize, h: usize) -> Vec<f32> {
+    // Each level: (width, height, weight 0..1, colour).
+    let mut levels: Vec<(usize, usize, Vec<f32>, Vec<f32>)> = vec![(w, h, coverage.iter().map(|c| 1.0 - c).collect(), original.to_vec())];
+    while let Some((lw, lh, lwt, lc)) = levels.last()
+        && (*lw > 1 || *lh > 1)
+    {
+        let (nw, nh) = (lw.div_ceil(2), lh.div_ceil(2));
+        let (mut wt, mut col) = (vec![0.0f32; nw * nh], vec![0.0f32; nw * nh * 3]);
+        for y in 0..nh {
+            for x in 0..nw {
+                let (mut sum, mut acc) = (0.0f32, [0.0f32; 3]);
+                for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                    let (sx, sy) = (2 * x + dx, 2 * y + dy);
+                    if sx < *lw && sy < *lh {
+                        let i = sy * lw + sx;
+                        sum += lwt[i];
+                        for c in 0..3 {
+                            acc[c] += lwt[i] * lc[i * 3 + c];
+                        }
+                    }
+                }
+                let i = y * nw + x;
+                if sum > 0.0 {
+                    for c in 0..3 {
+                        col[i * 3 + c] = acc[c] / sum;
+                    }
+                }
+                wt[i] = sum.min(1.0);
+            }
+        }
+        levels.push((nw, nh, wt, col));
+    }
+    // Bring the averages back up: unknown parts of each level take the level above, interpolated.
+    for l in (0..levels.len() - 1).rev() {
+        let (cw, ch, _, coarse) = levels[l + 1].clone();
+        let (lw, lh, wt, col) = &mut levels[l];
+        for y in 0..*lh {
+            let fy = ((y as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (ch - 1) as f32);
+            let (y0, ty) = (fy.floor() as usize, fy.fract());
+            let y1 = (y0 + 1).min(ch - 1);
+            for x in 0..*lw {
+                let fx = ((x as f32 + 0.5) / 2.0 - 0.5).clamp(0.0, (cw - 1) as f32);
+                let (x0, tx) = (fx.floor() as usize, fx.fract());
+                let x1 = (x0 + 1).min(cw - 1);
+                let i = y * *lw + x;
+                for c in 0..3 {
+                    let at = |xx: usize, yy: usize| coarse[(yy * cw + xx) * 3 + c];
+                    let up = (at(x0, y0) * (1.0 - tx) + at(x1, y0) * tx) * (1.0 - ty) + (at(x0, y1) * (1.0 - tx) + at(x1, y1) * tx) * ty;
+                    col[i * 3 + c] = wt[i] * col[i * 3 + c] + (1.0 - wt[i]) * up;
+                }
+            }
+        }
+    }
+    levels.swap_remove(0).3
+}
+
+/// What a result is matched against: the area as it was before the hole was cleared (RGB, 0..1)
+/// and the selection's coverage, both at the request size.
+pub(crate) struct Reference {
+    original: Vec<f32>,
+    coverage: Vec<f32>,
+    w: u32,
+    h: u32,
+}
+
+/// Box blur of a `w`×`h` plane with radius `r`, edges clamped.
+fn box_blur(v: &mut [f32], w: usize, h: usize, r: usize) {
+    let pass = |line: &mut [f32], tmp: &mut Vec<f32>| {
+        let n = line.len();
+        tmp.clear();
+        tmp.extend_from_slice(line);
+        let mut sum: f32 = (0..=r.min(n - 1)).map(|i| tmp[i]).sum();
+        let mut count = r.min(n - 1) + 1;
+        for i in 0..n {
+            line[i] = sum / count as f32;
+            if i + r + 1 < n {
+                sum += tmp[i + r + 1];
+                count += 1;
+            }
+            if i >= r {
+                sum -= tmp[i - r];
+                count -= 1;
+            }
+        }
+    };
+    let mut tmp = Vec::new();
+    let mut col = vec![0.0; h];
+    for row in v.chunks_mut(w) {
+        pass(row, &mut tmp);
+    }
+    for x in 0..w {
+        for y in 0..h {
+            col[y] = v[y * w + x];
+        }
+        pass(&mut col, &mut tmp);
+        for y in 0..h {
+            v[y * w + x] = col[y];
+        }
+    }
+}
+
+/// Brightness of an RGBA or RGB pixel (0..1), Rec. 709 weights.
+fn luma(p: &[f32]) -> f32 {
+    0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]
+}
+
+/// A tone curve taking brightness `from` to brightness `to`, fitted over the pixels with weight
+/// `wt`: the mean change at each of [`BINS`] levels, so a model that lifts the shadows and leaves
+/// the highlights is undone level by level. Levels without enough samples take their neighbours'
+/// change; the curve never turns downward.
+fn fit_curve(from: &[f32], to: &[f32], wt: &[f32]) -> [f32; BINS] {
+    let (mut n, mut d) = ([0.0f64; BINS], [0.0f64; BINS]);
+    for (i, &o) in wt.iter().enumerate() {
+        let x = from[i].clamp(0.0, 1.0);
+        let b = ((x * BINS as f32) as usize).min(BINS - 1);
+        n[b] += f64::from(o);
+        d[b] += f64::from(o) * f64::from(to[i] - x);
+    }
+    let known: Vec<usize> = (0..BINS).filter(|&b| n[b] >= 32.0).collect();
+    let at = |k: usize| (d[k] / n[k]) as f32;
+    let mut curve = [0.0f32; BINS];
+    for (b, v) in curve.iter_mut().enumerate() {
+        *v = match (known.iter().rev().find(|&&k| k <= b), known.iter().find(|&&k| k >= b)) {
+            (Some(&lo), Some(&hi)) if lo != hi => at(lo) + (at(hi) - at(lo)) * (b - lo) as f32 / (hi - lo) as f32,
+            (Some(&k), _) | (None, Some(&k)) => at(k),
+            (None, None) => 0.0,
+        };
+    }
+    // Rising: each level's output at least the one below it.
+    for b in 1..BINS {
+        curve[b] = curve[b].max(curve[b - 1] - 1.0 / BINS as f32);
+    }
+    curve
+}
+
+/// `v` through a curve from [`fit_curve`] (the change at each level's centre, interpolated).
+fn apply_curve(curve: &[f32; BINS], v: f32) -> f32 {
+    let t = (v.clamp(0.0, 1.0) * BINS as f32 - 0.5).clamp(0.0, (BINS - 1) as f32);
+    let (b, f) = (t as usize, t.fract());
+    v + curve[b] + (curve[(b + 1).min(BINS - 1)] - curve[b]) * f
+}
+
+/// An RGBA pixel's brightness moved along `curve`, its hue and saturation kept: scaled while
+/// bright enough to scale, shifted near black.
+fn tone(curve: &[f32; BINS], p: &mut [f32]) {
+    let y = luma(p);
+    let target = apply_curve(curve, y);
+    for v in &mut p[..3] {
+        *v = if y > 0.05 { *v * (target / y) } else { *v + (target - y) };
+    }
+}
+
+/// Take out the colour drift a model adds when it redraws the whole image, so the fill meets the
+/// photo around it without a seam. Everything outside the selection should have come back
+/// unchanged; comparing it with the original measures the drift. First a tone curve on brightness
+/// (models relight: shadows lifted, highlights kept), hue untouched, fitted again without the pixels the model
+/// actually changed (an object it moved), then
+/// what is left at the edge carried smoothly inward by push-pull, as Photoshop's fills blend into
+/// their surroundings. `px` is RGBA (0..1) at the reference size.
+fn match_surroundings(px: &mut [f32], r: &Reference) -> String {
+    let (w, h) = (r.w as usize, r.h as usize);
+    let mut outside: Vec<f32> = r.coverage.iter().map(|c| 1.0 - c.clamp(0.0, 1.0)).collect();
+    let weight: f64 = outside.iter().map(|&o| f64::from(o)).sum();
+    if weight < 16.0 || px.len() != w * h * 4 {
+        return "not matched: too little outside the selection".into();
+    }
+    // A result that doesn't resemble the original around the selection (reframed, restyled) is
+    // left alone rather than forced onto it.
+    let diff: f64 = (0..w * h).map(|i| f64::from(outside[i]) * (0..3).map(|c| f64::from((px[i * 4 + c] - r.original[i * 3 + c]).abs())).sum::<f64>()).sum();
+    let drift = diff / (weight * 3.0);
+    if drift > MAX_DRIFT {
+        return format!("not matched: mean difference outside the selection {drift:.3} > {MAX_DRIFT}");
+    }
+    let target: Vec<f32> = r.original.as_chunks::<3>().0.iter().map(|p| luma(p)).collect();
+    let fit = |px: &[f32], wt: &[f32]| fit_curve(&px.as_chunks::<4>().0.iter().map(|p| luma(p)).collect::<Vec<_>>(), &target, wt);
+    // What the model changed rather than relit: different detail (an edge moved, an object
+    // redrawn), or a different colour by far more than relighting explains.
+    let first = fit(px, &outside);
+    let detail = |mut v: Vec<f32>| {
+        let mut smooth = v.clone();
+        box_blur(&mut smooth, w, h, 2);
+        box_blur(&mut smooth, w, h, 2);
+        v.iter_mut().zip(&smooth).for_each(|(a, b)| *a -= b);
+        v
+    };
+    let (got, want) = (detail(px.as_chunks::<4>().0.iter().map(|p| luma(p)).collect()), detail(target.clone()));
+    let mut differs: Vec<f32> = got.iter().zip(&want).map(|(a, b)| (a - b).abs()).collect();
+    box_blur(&mut differs, w, h, 4);
+    let mut changed = 0.0f64;
+    for (i, p) in px.as_chunks::<4>().0.iter().enumerate() {
+        let mut q = *p;
+        tone(&first, &mut q);
+        let far = (0..3).map(|c| (q[c] - r.original[i * 3 + c]).abs()).sum::<f32>() / 3.0 > CHANGED;
+        if outside[i] > 0.0 && (far || differs[i] > DETAIL) {
+            changed += f64::from(outside[i]);
+            outside[i] = 0.0;
+        }
+    }
+    let curve = if outside.iter().map(|&o| f64::from(o)).sum::<f64>() >= 16.0 { fit(px, &outside) } else { first };
+    let stats = format!(
+        "mean difference outside the selection {drift:.3}; {:.0}% of it changed; brightness change in shadows/midtones/highlights: {:+.3}/{:+.3}/{:+.3}",
+        100.0 * changed / weight,
+        curve[BINS / 8],
+        curve[BINS / 2],
+        curve[BINS * 7 / 8]
+    );
+    for p in px.as_chunks_mut::<4>().0 {
+        tone(&curve, p);
+    }
+    // What the curve leaves, known only where the result kept the original, spread over the rest.
+    let residual: Vec<f32> = (0..w * h).flat_map(|i| [0, 1, 2].map(|c| if outside[i] > 0.0 { r.original[i * 3 + c] - px[i * 4 + c] } else { 0.0 })).collect();
+    let unknown: Vec<f32> = outside.iter().map(|o| 1.0 - o).collect();
+    let spread = surroundings_fill(&residual, &unknown, w, h);
+    for i in 0..w * h {
+        for c in 0..3 {
+            let v = &mut px[i * 4 + c];
+            if r.coverage[i] > 0.0 {
+                *v += spread[i * 3 + c];
+            }
+            *v = v.clamp(0.0, 1.0);
+        }
+    }
+    stats
+}
+
+/// Decode a provider's PNG or JPEG into 8-bit sRGB, with its size.
+fn decode(bytes: &[u8]) -> Result<(Surface, Rect)> {
+    let opts = codecs::DecodeOptions {
+        limits: codecs::Limits { max_width: RESULT_SIDE, max_height: RESULT_SIDE, max_pixels: 40_000_000, max_alloc: 512 * 1024 * 1024 },
+        keep_orientation: false,
+    };
+    let format = codecs::detect(bytes)
+        .filter(|f| matches!(f, Format::Png | Format::Jpeg | Format::WebP))
+        .ok_or_else(|| other("the image service returned an unreadable image"))?;
+    let img = codecs::decode_as_with(format, bytes, &opts).map_err(|e| other(format!("the image service returned an unreadable image ({e})")))?;
+    let img = img.convert(ChannelLayout::Rgba, CodecSample::U8);
+    let r = Rect::from_xywh(0, 0, img.width(), img.height());
+    if r.is_empty() {
+        return Err(other("the image service returned an empty image"));
+    }
+    let mut s = Surface::new(PixelFormat::new(ColorMode::Rgb, SampleType::U8, true));
+    s.write_interleaved(r, img.data());
+    Ok((s, r))
+}
+
+/// The new layer's name: Photoshop names a generative layer after its prompt.
+fn layer_name(prompt: &str) -> String {
+    let p = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
+    if p.is_empty() {
+        return LABEL.into();
+    }
+    match p.char_indices().nth(40) {
+        Some((i, _)) => format!("{}…", &p[..i]),
+        None => p,
+    }
+}
+
+/// What a generative layer was made from (the image and mask sent, the prompt and where the
+/// result goes), so Generate More can ask the provider again without re-rendering a document that
+/// now holds the earlier results. Kept in the session only: a reopened file's generative layer is
+/// an ordinary group.
+pub(crate) struct Source {
+    prompt: String,
+    area: Rect,
+    request: EditRequest,
+    reference: Reference,
+    /// The provider that made it, for Generate More.
+    provider: String,
+}
+
+fn variations_param(p: &Value, key: &str) -> Result<usize> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(DEFAULT_VARIATIONS),
+        Some(v) => match v.as_u64() {
+            Some(n @ 1..=MAX_VARIATIONS) => Ok(n as usize),
+            _ => Err(bad(format!("`{key}` must be a whole number from 1 to {MAX_VARIATIONS}"))),
+        },
+    }
+}
+
+/// Ask for `count` results of one request. The calls run side by side (each is a slow network
+/// round trip); any that fail are dropped as long as one succeeds.
+fn request_all(ctx: &crate::jobs::JobCtx, provider: &dyn ImageProvider, request: &EditRequest, count: usize) -> Result<Vec<Vec<u8>>> {
+    let mut request = request.clone();
+    let job = ctx.clone();
+    request.cancel = photocraft_genai::CancelToken::new(move || job.cancelled());
+    let request = &request;
+    let name = provider.info().name;
+    let msg = if count == 1 { format!("Waiting for {name}") } else { format!("Waiting for {name} ({count} variations)") };
+    ctx.progress(0.15, &msg);
+    #[cfg(not(target_arch = "wasm32"))]
+    let results: Vec<_> = if count == 1 {
+        vec![provider.edit(request)]
+    } else {
+        std::thread::scope(|scope| {
+            let calls: Vec<_> = (0..count).map(|_| scope.spawn(|| provider.edit(request))).collect();
+            calls.into_iter().map(|c| c.join().unwrap_or(Err(photocraft_genai::GenError::BadResponse("the request failed")))).collect()
+        })
+    };
+    #[cfg(target_arch = "wasm32")]
+    let results: Vec<_> = (0..count).map(|_| provider.edit(request)).collect();
+    ctx.check()?;
+    let mut first_error = None;
+    let mut images = Vec::new();
+    for r in results {
+        match r {
+            Ok(img) => images.push(img.bytes),
+            Err(e) => {
+                first_error.get_or_insert(e);
+            }
+        }
+    }
+    match (images.is_empty(), first_error) {
+        (true, Some(e)) => Err(other(e)),
+        (true, None) => Err(other("the image service returned nothing")),
+        _ => Ok(images),
+    }
+}
+
+/// Below this spread of brightness (standard deviation, 0..1) inside the selection a result is
+/// flat: OpenAI sometimes answers with the masked area solid black.
+const FLAT: f64 = 0.015;
+/// A flat result is only empty when its brightness is further than this (0..1) from the
+/// original just around the selection: a plain fill on a plain backdrop (object removal on a
+/// white wall) is a real fill.
+const FLAT_MISMATCH: f64 = 0.25;
+/// How far (request pixels) outside the selection its surroundings are measured.
+const RING: f32 = 8.0;
+
+/// Brightness (0..1) of the original just outside the selection, as (mean, standard
+/// deviation): within [`RING`] of it, else anywhere outside it, `None` when nothing is outside it.
+fn surroundings(r: &Reference) -> Option<(f64, f64)> {
+    let (w, h) = (r.w as usize, r.h as usize);
+    let (original, _) = r.original.as_chunks::<3>();
+    if original.len() != r.coverage.len() {
+        return None;
+    }
+    let inside: Vec<bool> = r.coverage.iter().map(|c| *c > 0.5).collect();
+    let near = sel_algo::edt(&inside, w, h);
+    let stats = |pick: &dyn Fn(usize) -> bool| -> Option<(f64, f64)> {
+        let lumas: Vec<f64> = original.iter().enumerate().filter(|(i, _)| pick(*i)).map(|(_, p)| f64::from(luma(p))).collect();
+        if lumas.is_empty() {
+            return None;
+        }
+        let n = lumas.len() as f64;
+        let mean = lumas.iter().sum::<f64>() / n;
+        Some((mean, (lumas.iter().map(|l| (l - mean).powi(2)).sum::<f64>() / n).sqrt()))
+    };
+    let outside = |i: usize| !inside.get(i).copied().unwrap_or(true);
+    stats(&|i| outside(i) && near.get(i).is_some_and(|d| *d <= RING)).or_else(|| stats(&outside))
+}
+
+/// Below this mean difference (0..1) from the image sent, inside the selection, a result is
+/// unchanged: the model gave back what it was sent. Judged only where the surroundings have
+/// detail (brightness spread at least [`FLAT`]): on a plain backdrop the smooth placeholder sent
+/// is itself the right fill.
+const UNCHANGED: f64 = 0.02;
+
+/// Why a result (`px`, RGBA 0..1 at the request size) is no use as a fill, if it isn't, judged
+/// inside the selection (coverage over half): flat and unlike the original around the selection
+/// (a solid black answer), or, around a textured selection, unchanged from the image sent
+/// (`sent`, RGBA 0..1 at the request size). With nothing to judge by (no pixels inside, sizes
+/// that don't match, nothing outside the selection) the result is kept.
+fn unusable(px: &[f32], sent: Option<&[f32]>, r: &Reference, around: Option<(f64, f64)>) -> Option<String> {
+    let n = r.w as usize * r.h as usize;
+    let (px4, _) = px.as_chunks::<4>();
+    if px4.len() != n || r.coverage.len() != n {
+        return None;
+    }
+    let inside: Vec<&[f32; 4]> = px4.iter().zip(&r.coverage).filter(|(_, c)| **c > 0.5).map(|(p, _)| p).collect();
+    if inside.is_empty() {
+        return None;
+    }
+    let count = inside.len() as f64;
+    let mean = inside.iter().map(|p| f64::from(luma(*p))).sum::<f64>() / count;
+    let spread = (inside.iter().map(|p| (f64::from(luma(*p)) - mean).powi(2)).sum::<f64>() / count).sqrt();
+    if spread < FLAT
+        && let Some((around, _)) = around
+        && (mean - around).abs() > FLAT_MISMATCH
+    {
+        return Some(format!("rejected: flat (brightness spread inside the selection {spread:.4} < {FLAT}, brightness {mean:.3} vs {around:.3} around it)"));
+    }
+    let (_, around_spread) = around?;
+    if around_spread < FLAT {
+        return None;
+    }
+    let sent4 = sent.map(|s| s.as_chunks::<4>().0).filter(|s| s.len() == n)?;
+    let diff = px4
+        .iter()
+        .zip(sent4)
+        .zip(&r.coverage)
+        .filter(|(_, c)| **c > 0.5)
+        .map(|((p, q), _)| (0..3).map(|c| f64::from((p[c] - q[c]).abs())).sum::<f64>())
+        .sum::<f64>()
+        / (count * 3.0);
+    (diff < UNCHANGED).then(|| format!("rejected: unchanged (mean difference from the image sent inside the selection {diff:.4} < {UNCHANGED})"))
+}
+
+/// A provider's image at the request size.
+fn at_request_size(bytes: &[u8], reference: &Reference) -> Result<Surface> {
+    let (got, full) = decode(bytes)?;
+    Ok(scaled(&got, full, reference.w, reference.h))
+}
+
+/// A result at the request size (`at_request`, whose pixels are `px`), colour-matched to the
+/// original around the selection, scaled into `area` in document coordinates.
+fn place(mut at_request: Surface, mut px: Vec<f32>, area: Rect, reference: &Reference) -> (Surface, String) {
+    let r = Rect::from_xywh(0, 0, reference.w, reference.h);
+    let stats = match_surroundings(&mut px, reference);
+    at_request.write_region(r, &px);
+    let fitted = scaled(&at_request, r, area.width(), area.height());
+    let mut placed = Surface::new(fitted.format());
+    placed.write_region(area, &fitted.read_region(Rect::from_xywh(0, 0, area.width(), area.height())));
+    (placed, stats)
+}
+
+/// Debugging aid: with `PHOTOCRAFT_GENAI_DUMP` set to a folder, each request's image, mask, raw
+/// results and colour-matching figures are written to a new subfolder of it. Nothing is written
+/// unless the variable is set.
+fn dump(request: &EditRequest, results: &[Vec<u8>], stats: &[String]) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some(root) = std::env::var_os("PHOTOCRAFT_GENAI_DUMP") else { return };
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+        let dir = std::path::Path::new(&root).join(format!("fill-{stamp}"));
+        if std::fs::create_dir_all(&dir).is_err() {
+            return;
+        }
+        let _ = std::fs::write(dir.join("sent-image.png"), &request.image);
+        let _ = std::fs::write(dir.join("sent-mask.png"), &request.mask);
+        let _ = std::fs::write(dir.join("prompt.txt"), &request.prompt);
+        for (i, bytes) in results.iter().enumerate() {
+            let ext = if bytes.starts_with(b"\x89PNG") { "png" } else { "jpg" };
+            let _ = std::fs::write(dir.join(format!("result-{}.{ext}", i + 1)), bytes);
+        }
+        let _ = std::fs::write(dir.join("color-match.txt"), stats.iter().enumerate().map(|(i, s)| format!("result {}: {s}\n", i + 1)).collect::<String>());
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = (request, results, stats);
+}
+
+/// Place every usable result (see [`unusable`]), then (when asked) dump the request and all the
+/// raw results for debugging, noting which were rejected and why. When none is usable, an error
+/// and nothing placed.
+fn place_all(request: &EditRequest, results: &[Vec<u8>], area: Rect, reference: &Reference) -> Result<Vec<Surface>> {
+    let full = Rect::from_xywh(0, 0, reference.w, reference.h);
+    let sent = decode(&request.image).ok().map(|(s, r)| scaled(&s, r, reference.w, reference.h).read_region(full));
+    // The original around the selection, worked out once for every result.
+    let around = surroundings(reference);
+    let mut placed = Vec::new();
+    let mut stats = Vec::new();
+    for bytes in results {
+        let at_request = at_request_size(bytes, reference)?;
+        let px = at_request.read_region(full);
+        match unusable(&px, sent.as_deref(), reference, around) {
+            Some(why) => stats.push(why),
+            None => {
+                let (p, s) = place(at_request, px, area, reference);
+                placed.push(p);
+                stats.push(s);
+            }
+        }
+    }
+    dump(request, results, &stats);
+    if placed.is_empty() {
+        return Err(other("the image service returned no usable fill; try again"));
+    }
+    Ok(placed)
+}
+
+/// Selections whose long side is shorter than this keep a hard edge.
+const SOFT_EDGE_MIN_SIDE: u32 = 64;
+/// Widest edge band, in document pixels.
+const MAX_EDGE_BAND: u32 = 32;
+/// Largest area (pixels) the soft edge is worked out over; past it the selection's own edge is
+/// used rather than allocating several more full-size planes (at this size each f32 plane is
+/// 128 MiB, and at most three are alive at once, plus the distance transform's working storage).
+const MAX_EDGE_PIXELS: usize = 1 << 25;
+
+/// How wide (document pixels) the blend between a fill and the image around it is: 1.5% of the
+/// selection's long side, at most [`MAX_EDGE_BAND`], none for small selections. Model output
+/// rarely lines up exactly with the original at the selection's edge (a crease that steps, an
+/// edge the model ends at the boundary); a band this wide hides the step, as the soft edge of
+/// Photoshop's generative layer masks does.
+fn edge_band(selected: Rect) -> u32 {
+    let long = selected.width().max(selected.height());
+    if long < SOFT_EDGE_MIN_SIDE {
+        return 0;
+    }
+    ((0.015 * f64::from(long)).round() as u32).min(MAX_EDGE_BAND)
+}
+
+/// The generative layer's mask: the selection (`sel`, whose content lies in `selected`) grown by
+/// half the [`edge_band`] and feathered by as much again (Gaussian, sigma = half the band), so the
+/// fill fades into the image across a band centred just outside the selection's edge. Worked out
+/// over the selection's bounds plus the band's reach only; past the canvas the selection is taken
+/// to continue (as Select › Modify does by default), so a selection running off the canvas isn't
+/// faded at the canvas edge. Partial (feathered) selections keep their coverage: growing never
+/// goes past the largest coverage within reach, so 50% stays 50% and a feather's ramp is kept.
+fn blended_mask(sel: &Surface, selected: Rect, canvas: Rect) -> Surface {
+    blended_mask_within(sel, selected, canvas, MAX_EDGE_PIXELS)
+}
+
+/// [`blended_mask`], falling back to the selection as it is when the area worked over would be
+/// larger than `cap` pixels.
+fn blended_mask_within(sel: &Surface, selected: Rect, canvas: Rect, cap: usize) -> Surface {
+    let b = edge_band(selected);
+    if b == 0 {
+        return sel.clone();
+    }
+    let half = b as f32 / 2.0;
+    // Growing reaches b/2, the feather 3σ = 3b/2 past that.
+    let margin = (2 * b + 2) as i32;
+    let outer = Rect::new(
+        selected.x0.saturating_sub(margin),
+        selected.y0.saturating_sub(margin),
+        selected.x1.saturating_add(margin),
+        selected.y1.saturating_add(margin),
+    );
+    let inner = outer.intersect(&canvas);
+    let (ow, oh, iw, ih) = (outer.width() as usize, outer.height() as usize, inner.width() as usize, inner.height() as usize);
+    if inner.is_empty() || ow.checked_mul(oh).is_none_or(|n| n > cap) {
+        return sel.clone();
+    }
+    let known = sel_algo::mask_from_surface(Some(sel), inner);
+    // Outside the canvas, the nearest pixel on it.
+    let at = |x: i32, y: i32| -> f32 {
+        let ix = (x.clamp(inner.x0, inner.x1 - 1) - inner.x0) as usize;
+        let iy = (y.clamp(inner.y0, inner.y1 - 1) - inner.y0) as usize;
+        known.get(iy * iw + ix).copied().unwrap_or(0.0)
+    };
+    let mut m = Vec::with_capacity(ow * oh);
+    for y in outer.y0..outer.y1 {
+        m.extend((outer.x0..outer.x1).map(|x| at(x, y)));
+    }
+    drop(known);
+    // Grown, but never past the coverage nearby: Expand treats 50% as selected and grows it to
+    // 100%, which would make a half-selected area fully opaque and cut a feathered selection's
+    // ramp at its 50% contour.
+    let mut grown = sel_algo::expand(&m, ow, oh, half);
+    let nearby = max_filter(&m, ow, oh, half.ceil() as usize);
+    drop(m);
+    grown.iter_mut().zip(&nearby).for_each(|(g, n)| *g = g.min(*n));
+    drop(nearby);
+    let soft = sel_algo::feather(&grown, ow, oh, half);
+    drop(grown);
+    let (dx, dy) = ((inner.x0 - outer.x0) as usize, (inner.y0 - outer.y0) as usize);
+    let mut cropped = Vec::with_capacity(iw * ih);
+    for row in soft.chunks_exact(ow).skip(dy).take(ih) {
+        cropped.extend(row.iter().skip(dx).take(iw).map(|v| v.clamp(0.0, 1.0)));
+    }
+    if cropped.len() != iw * ih {
+        return sel.clone();
+    }
+    sel_algo::combine(None, &cropped, inner, sel_algo::SelectionMode::Replace).unwrap_or_else(|| sel.clone())
+}
+
+/// The largest value within `r` pixels (a square, edges clamped) of each pixel of a `w`×`h`
+/// plane: separable, a row pass then a column pass.
+fn max_filter(m: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+    if m.len() != w * h || w == 0 || h == 0 {
+        return m.to_vec();
+    }
+    let pass = |line: &[f32], out: &mut Vec<f32>| {
+        out.clear();
+        let n = line.len();
+        out.extend((0..n).map(|i| line.get(i.saturating_sub(r)..(i + r + 1).min(n)).map_or(0.0, |s| s.iter().copied().fold(0.0f32, f32::max))));
+    };
+    let mut rows = Vec::with_capacity(m.len());
+    let mut out = Vec::new();
+    for row in m.chunks_exact(w) {
+        pass(row, &mut out);
+        rows.extend_from_slice(&out);
+    }
+    let mut col = vec![0.0f32; h];
+    for x in 0..w {
+        for (y, c) in col.iter_mut().enumerate() {
+            *c = rows.get(y * w + x).copied().unwrap_or(0.0);
+        }
+        pass(&col, &mut out);
+        for (y, v) in out.iter().enumerate() {
+            if let Some(d) = rows.get_mut(y * w + x) {
+                *d = *v;
+            }
+        }
+    }
+    rows
+}
+
+fn variation_layer(doc: &Document, pixels: &Surface, n: usize, visible: bool) -> Result<Layer> {
+    let converted = to_document(doc, pixels)?;
+    let mut layer = Layer::raster(format!("Variation {n}"), converted.format());
+    *layer.surface_mut().ok_or_else(|| other("could not create the layer"))? = converted;
+    layer.visible = visible;
+    Ok(layer)
+}
+
+fn fill(s: &mut Session, p: &Value) -> Result<Value> {
+    let prompt = match p.get("prompt") {
+        None | Some(Value::Null) => String::new(),
+        Some(Value::String(t)) => t.trim().to_owned(),
+        Some(_) => return Err(bad("`prompt` must be text")),
+    };
+    photocraft_genai::check_prompt(&prompt, false).map_err(|e| bad(e.to_string()))?;
+    let count = variations_param(p, "variations")?;
+    fill_enabled(s).map_err(bad)?;
+    let provider = chosen_provider(s, p, FILL, None)?;
+    check_can_edit(provider.as_ref(), FILL)?;
+    check_prompt_for(provider.as_ref(), &prompt, FILL)?;
+    let provider_id = provider.info().id.to_owned();
+    let st = s.active().ok_or(EngineError::NoDocument)?;
+    let doc = st.doc.clone();
+    let selection = doc.selection.clone().ok_or_else(|| bad("no selection"))?;
+    let canvas = doc.bounds();
+    let selected = selection.content_bounds().intersect(&canvas);
+    let area = context_area(selected, canvas, |w, h| provider.edit_aspect(w, h));
+    let k = upload_scale(f64::from(area.width().max(area.height())), provider.max_side(), provider.min_side());
+    let (w, h) = (((f64::from(area.width()) * k).round() as u32).max(1), ((f64::from(area.height()) * k).round() as u32).max(1));
+    let name = layer_name(&prompt);
+    crate::jobs::run(
+        s,
+        LABEL,
+        true,
+        move |ctx| {
+            ctx.progress(0.05, "Preparing image");
+            let (image, mask, reference) = request_images(&scaled(&srgb_composite(&doc, area)?, area, w, h), &selection, area, w, h)?;
+            ctx.check()?;
+            let request = EditRequest { image, mask, prompt, size: ImageSize::for_long_side(w.max(h)), cancel: photocraft_genai::CancelToken::default() };
+            let results = request_all(ctx, provider.as_ref(), &request, count)?;
+            ctx.progress(0.9, "Placing the results");
+            let placed = place_all(&request, &results, area, &reference)?;
+            ctx.check()?;
+            let mask = blended_mask(&selection, selected, canvas);
+            let source = Source { prompt: request.prompt.clone(), area, request, reference, provider: provider_id };
+            Ok((placed, mask, source))
+        },
+        move |s, (placed, mask, source)| {
+            let (group, ids) = s.edit(LABEL, |doc, active| {
+                // Photoshop's generative layer holds its variations; here that is a group masked by
+                // the selection with a softened edge, as Photoshop's generative layers are, with one
+                // layer per variation, the first one showing.
+                let children = placed.iter().enumerate().map(|(i, px)| variation_layer(doc, px, i + 1, i == 0)).collect::<Result<Vec<_>>>()?;
+                let ids: Vec<u64> = children.iter().map(|l| l.id.0).collect();
+                let mut group = Layer::group(name, children);
+                group.mask = Some(LayerMask { surface: mask, ..LayerMask::reveal_all() });
+                let id = doc.insert_above(*active, group);
+                crate::layer_multi_cmds::check_group_depth(doc, LABEL)?;
+                *active = Some(id);
+                Ok((id, ids))
+            })?;
+            s.genai_sources.insert(group, Arc::new(source));
+            Ok(json!({"layer": group.0, "variations": ids, "bounds": [area.x0, area.y0, area.width(), area.height()]}))
+        },
+    )
+}
+
+/// The generative layer `p["layer"]` names, or the active one: the group itself or one of its
+/// variations.
+fn generative_target(s: &Session, p: &Value) -> Option<LayerId> {
+    let st = s.active()?;
+    let id = match p.get("layer").and_then(Value::as_u64) {
+        Some(id) => LayerId(id),
+        None => st.active_layer?,
+    };
+    let is_generative = |id: LayerId| s.genai_sources.contains_key(&id) && st.doc.layer(id).is_some_and(Layer::is_group);
+    if is_generative(id) {
+        return Some(id);
+    }
+    let path = st.doc.path_of(id)?;
+    let parent = st.doc.layer_at(path.get(..path.len().checked_sub(1)?)?)?.id;
+    is_generative(parent).then_some(parent)
+}
+
+impl Session {
+    /// The active generative layer (a Generative Fill group, or the active variation's group), for
+    /// the Properties panel's variations.
+    pub fn generative_layer(&self) -> Option<LayerId> {
+        generative_target(self, &Value::Null)
+    }
+
+    /// The prompt a generative layer was made with.
+    pub fn generative_prompt(&self, id: LayerId) -> Option<&str> {
+        self.genai_sources.get(&id).map(|s| s.prompt.as_str())
+    }
+
+    /// The id of the provider a generative layer was made with, which Generate More sends to.
+    pub fn generative_provider(&self, id: LayerId) -> Option<&str> {
+        self.genai_sources.get(&id).map(|s| s.provider.as_str())
+    }
+}
+
+fn select_enabled(s: &Session) -> std::result::Result<(), String> {
+    generative_target(s, &Value::Null).map(|_| ()).ok_or_else(|| "select a generative layer first".into())
+}
+
+fn select_variation(s: &mut Session, p: &Value) -> Result<Value> {
+    let bad = |msg: &str| EngineError::BadParams { cmd: SELECT_VARIATION.into(), msg: msg.into() };
+    let group = generative_target(s, p).ok_or_else(|| bad("select a generative layer first"))?;
+    let index = p.get("index").and_then(Value::as_u64).ok_or_else(|| bad("`index` must be a variation number from 0"))? as usize;
+    let children = s.active().and_then(|st| st.doc.layer(group)).and_then(Layer::children).map_or(0, <[Layer]>::len);
+    if index >= children {
+        return Err(bad(&format!("this generative layer has {children} variations")));
+    }
+    s.edit("Generative Variation", |doc, _| {
+        let layers = doc.layer_mut(group).and_then(Layer::children_mut).ok_or_else(|| other("the generative layer is gone"))?;
+        for (i, l) in layers.iter_mut().enumerate() {
+            l.visible = i == index;
+        }
+        Ok(())
+    })?;
+    Ok(json!({"layer": group.0, "index": index}))
+}
+
+fn more_enabled(s: &Session) -> std::result::Result<(), String> {
+    any_editor(s)?;
+    select_enabled(s)
+}
+
+fn more(s: &mut Session, p: &Value) -> Result<Value> {
+    let bad = |msg: String| EngineError::BadParams { cmd: MORE.into(), msg };
+    let count = variations_param(p, "count").map_err(|_| bad(format!("`count` must be a whole number from 1 to {MAX_VARIATIONS}")))?;
+    more_enabled(s).map_err(bad)?;
+    let group = generative_target(s, p).ok_or_else(|| bad("select a generative layer first".into()))?;
+    let source = s.genai_sources.get(&group).cloned().ok_or_else(|| bad("select a generative layer first".into()))?;
+    let provider = chosen_provider(s, p, MORE, Some(&source.provider))?;
+    check_can_edit(provider.as_ref(), MORE)?;
+    check_prompt_for(provider.as_ref(), &source.prompt, MORE)?;
+    crate::jobs::run(
+        s,
+        LABEL,
+        true,
+        move |ctx| {
+            let results = request_all(ctx, provider.as_ref(), &source.request, count)?;
+            ctx.progress(0.9, "Placing the results");
+            place_all(&source.request, &results, source.area, &source.reference)
+        },
+        move |s, placed| {
+            let ids = s.edit("Generate More", |doc, _| {
+                let have = doc.layer(group).and_then(Layer::children).map(<[Layer]>::len).ok_or_else(|| other("the generative layer is gone"))?;
+                let new = placed.iter().enumerate().map(|(i, px)| variation_layer(doc, px, have + i + 1, i == 0)).collect::<Result<Vec<_>>>()?;
+                let ids: Vec<u64> = new.iter().map(|l| l.id.0).collect();
+                let layers = doc.layer_mut(group).and_then(Layer::children_mut).ok_or_else(|| other("the generative layer is gone"))?;
+                // The first new variation shows, as when the layer was made.
+                for l in layers.iter_mut() {
+                    l.visible = false;
+                }
+                layers.extend(new);
+                Ok(ids)
+            })?;
+            Ok(json!({"layer": group.0, "variations": ids}))
+        },
+    )
+}
+
+pub fn specs() -> Vec<CommandSpec> {
+    vec![
+        CommandSpec {
+            id: FILL,
+            label: "Generative Fill…",
+            menu: &["Edit"],
+            shortcut: None,
+            params: r#"{"prompt":str?,"variations":1..4=3,"provider":str?} fills the selection through the configured provider: a new group masked by the selection with a softened edge, as Photoshop's generative layers are, holds one layer per variation, the first showing. An empty prompt continues the surrounding image through it. Sends the selected area and its surroundings to that provider, once per variation. "provider" names a configured provider (default: the one chosen in Generative AI Settings)."#,
+            enabled: fill_enabled,
+            run: fill,
+            journal: true,
+        },
+        CommandSpec {
+            id: SELECT_VARIATION,
+            label: "Generative Variation",
+            menu: &[],
+            shortcut: None,
+            params: r#"{"index":uint,"layer":id?} shows variation `index` (0 = the first) of the active generative layer and hides the others."#,
+            enabled: select_enabled,
+            run: select_variation,
+            journal: true,
+        },
+        CommandSpec {
+            id: MORE,
+            label: "Generate More",
+            menu: &[],
+            shortcut: None,
+            params: r#"{"count":1..4=3,"layer":id?,"provider":str?} asks the provider for more variations of the active generative layer, with the same image, mask and prompt, and adds them to it. Without "provider" it asks the provider that made the layer. Sends that area to the provider again."#,
+            enabled: more_enabled,
+            run: more,
+            journal: true,
+        },
+    ]
+}
+
+#[cfg(test)]
+#[path = "genai_cmds_tests.rs"]
+mod tests;

@@ -3159,3 +3159,47 @@ curves	Smooth	Сгладить
 	set name	имя набора
 	{set} (modified)	{set} (изменён)
 	Random	Случайно
+# Generative Fill and Generative AI Settings (#41)
+	API key	Ключ API
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Опишите, что нужно создать в выделенной области, или оставьте поле пустым, чтобы изображение продолжилось сквозь неё.
+	Fill the selection from a prompt	Заполнить выделение по описанию
+	Generative AI	Генеративный ИИ
+	Generative AI Settings…	Настройки генеративного ИИ…
+	Generative AI needs the desktop app.	Генеративный ИИ доступен только в настольном приложении.
+	Generative Fill uses {name} ({model}).	Генеративная заливка использует {name} ({model}).
+	Generative Fill…	Генеративная заливка…
+	No API key is saved for {provider}.	Для {provider} не сохранён ключ API.
+	Prompt (optional)	Описание (необязательно)
+	Provider	Поставщик
+	Set up Generative Fill with your own API key	Настроить генеративную заливку со своим ключом API
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Выделенная область, окружающее её изображение и описание отправляются в {name} ({model}).
+	What is sent, and to whom	Что отправляется и кому
+	the macOS Keychain	связке ключей macOS
+	Windows Credential Manager	диспетчере учётных данных Windows
+	memory until PhotoCraft quits	памяти до закрытия PhotoCraft
+	Default for Generative Fill	По умолчанию для генеративной заливки
+	Set up	Настроено
+	Not set up	Не настроено
+	Needs credentials	Нужны учётные данные
+	Set Up…	Настроить…
+	Edit…	Изменить…
+	Client ID	ID клиента
+	Client secret	Секрет клиента
+	Saved (leave empty to keep)	Сохранено (оставьте пустым, чтобы сохранить)
+	Paste here	Вставьте сюда
+	Get credentials from {name}	Получить учётные данные в {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Ничего не отправляется, пока вы не запустите генеративную заливку. При каждом запуске PhotoCraft отправляет в {name} ({host}) выделенную область вместе с окружающим изображением, маску выделения и ваше описание, а также ваши учётные данные. Действуют условия использования и политика конфиденциальности этого сервиса, а использование оплачивается с вашего аккаунта.
+	Results are downloaded from {hosts}.	Результаты загружаются с {hosts}.
+	Results carry Google's SynthID watermark.	На результатах есть водяной знак SynthID от Google.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Каждая Генеративная заливка создаёт три варианта, поэтому отправляет три запроса, каждый оплачивается с вашего аккаунта.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Ваши учётные данные хранятся в {store} и никогда не попадают в файлы настроек PhotoCraft.
+	Enter every field for {provider}.	Заполните все поля для {provider}.
+	{provider} needs a prompt.	Для {provider} нужно описание.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Генеративная заливка по умолчанию использует {name} ({model}); настроено поставщиков: {count}.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Выключено. Чтобы пользоваться генеративной заливкой, настройте поставщика со своими учётными данными.
+# Generative Fill variations (#41)
+	Variations	Варианты
+	No prompt: continues the image	Без описания: продолжает изображение
+	Sends the same area and prompt to {name} again for three more.	Снова отправляет ту же область и описание в {name}, чтобы получить ещё три.
+	{name}, which made this layer, is no longer set up.	{name}, с помощью которого создан этот слой, больше не настроен.
+	Generate More	Создать ещё

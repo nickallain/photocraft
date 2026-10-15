@@ -3888,3 +3888,47 @@ curves	Smooth	Згладити
 	There are too many sets: delete one first.	Забагато наборів: спершу видаліть один.
 	set name	назва набору
 	{set} (modified)	{set} (змінено)
+# Generative Fill and Generative AI Settings (#41)
+	API key	Ключ API
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Опишіть, що створити у виділеній області, або залиште поле порожнім, щоб зображення продовжилося крізь неї.
+	Fill the selection from a prompt	Заповнити виділення за описом
+	Generative AI	Генеративний ШІ
+	Generative AI Settings…	Налаштування генеративного ШІ…
+	Generative AI needs the desktop app.	Генеративний ШІ доступний лише в настільному застосунку.
+	Generative Fill uses {name} ({model}).	Генеративна заливка використовує {name} ({model}).
+	Generative Fill…	Генеративна заливка…
+	No API key is saved for {provider}.	Для {provider} не збережено ключа API.
+	Prompt (optional)	Опис (необов’язково)
+	Provider	Постачальник
+	Set up Generative Fill with your own API key	Налаштувати генеративну заливку з власним ключем API
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Виділена область, зображення навколо неї та опис надсилаються до {name} ({model}).
+	What is sent, and to whom	Що надсилається і кому
+	the macOS Keychain	зв’язці ключів macOS
+	Windows Credential Manager	диспетчері облікових даних Windows
+	memory until PhotoCraft quits	пам’яті до закриття PhotoCraft
+	Default for Generative Fill	Типово для генеративної заливки
+	Set up	Налаштовано
+	Not set up	Не налаштовано
+	Needs credentials	Потрібні облікові дані
+	Set Up…	Налаштувати…
+	Edit…	Змінити…
+	Client ID	ID клієнта
+	Client secret	Секрет клієнта
+	Saved (leave empty to keep)	Збережено (залиште порожнім, щоб зберегти)
+	Paste here	Вставте сюди
+	Get credentials from {name}	Отримати облікові дані в {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Нічого не надсилається, доки ви не запустите генеративну заливку. Під час кожного запуску PhotoCraft надсилає до {name} ({host}) виділену область разом із зображенням навколо неї, маску виділення та ваш опис, а також ваші облікові дані. Діють умови використання та політика конфіденційності цього сервісу, а використання оплачується з вашого облікового запису.
+	Results are downloaded from {hosts}.	Результати завантажуються з {hosts}.
+	Results carry Google's SynthID watermark.	Результати мають водяний знак SynthID від Google.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Кожна Генеративна заливка створює три варіанти, тож надсилає три запити, кожен оплачується з вашого облікового запису.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Ваші облікові дані зберігаються в {store} і ніколи не потрапляють до файлів налаштувань PhotoCraft.
+	Enter every field for {provider}.	Заповніть усі поля для {provider}.
+	{provider} needs a prompt.	Для {provider} потрібен опис.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Генеративна заливка типово використовує {name} ({model}); налаштовано постачальників: {count}.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Вимкнено. Щоб користуватися генеративною заливкою, налаштуйте постачальника з власними обліковими даними.
+# Generative Fill variations (#41)
+	Variations	Варіанти
+	No prompt: continues the image	Без опису: продовжує зображення
+	Sends the same area and prompt to {name} again for three more.	Знову надсилає ту саму область і опис до {name}, щоб отримати ще три.
+	{name}, which made this layer, is no longer set up.	{name}, за допомогою якого створено цей шар, більше не налаштовано.
+	Generate More	Створити ще

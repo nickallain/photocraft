@@ -1,0 +1,72 @@
+[package]
+name = "photocraft-genai-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+# Standalone: excluded from the photocraft workspace.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+photocraft-genai = { path = ".." }
+
+[[bin]]
+name = "openai"
+path = "fuzz_targets/openai.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "stability"
+path = "fuzz_targets/stability.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ideogram"
+path = "fuzz_targets/ideogram.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bria"
+path = "fuzz_targets/bria.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bfl"
+path = "fuzz_targets/bfl.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fal"
+path = "fuzz_targets/fal.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "replicate"
+path = "fuzz_targets/replicate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "firefly"
+path = "fuzz_targets/firefly.rs"
+test = false
+doc = false
+bench = false

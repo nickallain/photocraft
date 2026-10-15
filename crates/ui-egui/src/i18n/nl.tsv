@@ -3949,3 +3949,46 @@ curves	Smooth	Vloeiend maken
 	There are too many sets: delete one first.	Er zijn te veel sets: verwijder er eerst een.
 	set name	naam van de set
 	{set} (modified)	{set} (gewijzigd)
+# Generative Fill and Generative AI Settings (#41)
+	API key	API-sleutel
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Beschrijf wat er in de selectie moet komen, of laat leeg om de afbeelding erdoorheen voort te zetten.
+	Fill the selection from a prompt	De selectie vullen op basis van een beschrijving
+	Generative AI	Generatieve AI
+	Generative AI Settings…	Instellingen voor generatieve AI…
+	Generative AI needs the desktop app.	Generatieve AI werkt alleen in de desktop-app.
+	Generative Fill uses {name} ({model}).	Generatief vullen gebruikt {name} ({model}).
+	Generative Fill…	Generatief vullen…
+	No API key is saved for {provider}.	Er is geen API-sleutel bewaard voor {provider}.
+	Prompt (optional)	Beschrijving (optioneel)
+	Provider	Aanbieder
+	Set up Generative Fill with your own API key	Generatief vullen instellen met uw eigen API-sleutel
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Het geselecteerde gebied, de omringende afbeelding en de beschrijving worden naar {name} ({model}) gestuurd.
+	What is sent, and to whom	Wat er wordt verstuurd, en naar wie
+	the macOS Keychain	de macOS-sleutelhanger
+	Windows Credential Manager	Windows Referentiebeheer
+	memory until PhotoCraft quits	het geheugen totdat PhotoCraft stopt
+	Default for Generative Fill	Standaard voor Generatief vullen
+	Set up	Ingesteld
+	Not set up	Niet ingesteld
+	Needs credentials	Inloggegevens nodig
+	Set Up…	Instellen…
+	Client ID	Client-ID
+	Client secret	Clientgeheim
+	Saved (leave empty to keep)	Bewaard (laat leeg om te behouden)
+	Paste here	Plak hier
+	Get credentials from {name}	Inloggegevens ophalen bij {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Er wordt niets verstuurd totdat u Generatief vullen uitvoert. Elke keer dat u dat doet, stuurt PhotoCraft het geselecteerde gebied met de omringende afbeelding, een masker van de selectie en uw beschrijving met uw inloggegevens naar {name} ({host}). De voorwaarden en het privacybeleid van die aanbieder zijn van toepassing en het gebruik wordt op uw account gefactureerd.
+	Results are downloaded from {hosts}.	Resultaten worden gedownload van {hosts}.
+	Results carry Google's SynthID watermark.	Resultaten dragen het SynthID-watermerk van Google.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Elk Generatief vullen maakt drie variaties en stuurt dus drie verzoeken, die elk op uw account worden gefactureerd.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Uw inloggegevens worden bewaard in {store}, nooit in de instellingenbestanden van PhotoCraft.
+	Enter every field for {provider}.	Vul alle velden in voor {provider}.
+	{provider} needs a prompt.	{provider} heeft een beschrijving nodig.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Generatief vullen gebruikt standaard {name} ({model}); er zijn {count} aanbieders ingesteld.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Uit. Stel een aanbieder in met uw eigen inloggegevens om Generatief vullen te gebruiken.
+# Generative Fill variations (#41)
+	Variations	Variaties
+	No prompt: continues the image	Geen beschrijving: zet de afbeelding voort
+	Sends the same area and prompt to {name} again for three more.	Stuurt hetzelfde gebied en dezelfde beschrijving opnieuw naar {name} voor nog drie.
+	{name}, which made this layer, is no longer set up.	{name}, waarmee deze laag is gemaakt, is niet meer ingesteld.
+	Generate More	Meer genereren

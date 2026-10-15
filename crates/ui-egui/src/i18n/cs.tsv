@@ -3797,3 +3797,47 @@ navigator	Zoom	Zvětšení
 	There are too many sets: delete one first.	Sad je příliš mnoho: nejprve jednu smažte.
 	set name	název sady
 	{set} (modified)	{set} (změněno)
+# Generative Fill and Generative AI Settings (#41)
+	API key	Klíč API
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Popište, co se má ve výběru vytvořit, nebo nechte prázdné a obraz bude výběrem plynule pokračovat.
+	Fill the selection from a prompt	Vyplnit výběr podle popisu
+	Generative AI	Generativní AI
+	Generative AI Settings…	Nastavení generativní AI…
+	Generative AI needs the desktop app.	Generativní AI vyžaduje desktopovou aplikaci.
+	Generative Fill uses {name} ({model}).	Generativní výplň používá {name} ({model}).
+	Generative Fill…	Generativní výplň…
+	No API key is saved for {provider}.	Pro {provider} není uložen žádný klíč API.
+	Prompt (optional)	Popis (nepovinný)
+	Provider	Poskytovatel
+	Set up Generative Fill with your own API key	Nastavit generativní výplň s vlastním klíčem API
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Vybraná oblast, obraz kolem ní a popis se odešlou do {name} ({model}).
+	What is sent, and to whom	Co se odesílá a komu
+	the macOS Keychain	klíčence macOS
+	Windows Credential Manager	Správci pověření Windows
+	memory until PhotoCraft quits	paměti, dokud se PhotoCraft neukončí
+	Default for Generative Fill	Výchozí pro generativní výplň
+	Set up	Nastaveno
+	Not set up	Nenastaveno
+	Needs credentials	Chybí přihlašovací údaje
+	Set Up…	Nastavit…
+	Edit…	Upravit…
+	Client ID	ID klienta
+	Client secret	Klientské tajemství
+	Saved (leave empty to keep)	Uloženo (nechte prázdné, chcete-li ponechat)
+	Paste here	Vložte sem
+	Get credentials from {name}	Získat přihlašovací údaje od {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Nic se neodešle, dokud nespustíte generativní výplň. Pokaždé, když ji spustíte, odešle PhotoCraft službě {name} ({host}) vybranou oblast i obraz kolem ní, masku výběru a váš popis spolu s vašimi přihlašovacími údaji. Platí její podmínky a zásady ochrany soukromí a využití se účtuje na váš účet.
+	Results are downloaded from {hosts}.	Výsledky se stahují z {hosts}.
+	Results carry Google's SynthID watermark.	Výsledky nesou vodoznak SynthID od Googlu.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Každá generativní výplň vytvoří tři varianty, takže odešle tři požadavky a každý se účtuje na váš účet.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Vaše přihlašovací údaje jsou uloženy v {store}, nikdy v souborech nastavení PhotoCraftu.
+	Enter every field for {provider}.	Vyplňte všechna pole pro {provider}.
+	{provider} needs a prompt.	{provider} vyžaduje popis.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Generativní výplň ve výchozím nastavení používá {name} ({model}); nastaveno je {count} poskytovatelů.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Vypnuto. Chcete-li používat generativní výplň, nastavte poskytovatele s vlastními přihlašovacími údaji.
+# Generative Fill variations (#41)
+	Variations	Varianty
+	No prompt: continues the image	Bez popisu: pokračuje v obrázku
+	Sends the same area and prompt to {name} again for three more.	Odešle stejnou oblast a popis znovu do {name} pro tři další.
+	{name}, which made this layer, is no longer set up.	{name}, který tuto vrstvu vytvořil, už není nastaven.
+	Generate More	Generovat další

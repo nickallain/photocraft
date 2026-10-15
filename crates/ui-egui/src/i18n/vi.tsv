@@ -3675,3 +3675,47 @@ curves	Smooth	Làm mượt
 	There are too many sets: delete one first.	Có quá nhiều bộ: hãy xóa một bộ trước.
 	set name	tên bộ
 	{set} (modified)	{set} (đã sửa đổi)
+# Generative Fill and Generative AI Settings (#41)
+	API key	Khóa API
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Mô tả nội dung cần tạo trong vùng chọn, hoặc để trống để ảnh được tiếp nối qua vùng đó.
+	Fill the selection from a prompt	Tô vùng chọn theo câu lệnh
+	Generative AI	AI tạo sinh
+	Generative AI Settings…	Cài đặt AI tạo sinh…
+	Generative AI needs the desktop app.	AI tạo sinh cần ứng dụng máy tính.
+	Generative Fill uses {name} ({model}).	Tô tạo sinh dùng {name} ({model}).
+	Generative Fill…	Tô tạo sinh…
+	No API key is saved for {provider}.	Chưa lưu khóa API cho {provider}.
+	Prompt (optional)	Câu lệnh (không bắt buộc)
+	Provider	Nhà cung cấp
+	Set up Generative Fill with your own API key	Thiết lập Tô tạo sinh bằng khóa API của bạn
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Vùng được chọn, phần ảnh xung quanh và câu lệnh được gửi tới {name} ({model}).
+	What is sent, and to whom	Gửi gì, và gửi cho ai
+	the macOS Keychain	Keychain của macOS
+	Windows Credential Manager	Trình quản lý thông tin xác thực Windows
+	memory until PhotoCraft quits	bộ nhớ cho đến khi thoát PhotoCraft
+	Default for Generative Fill	Mặc định cho Tô tạo sinh
+	Set up	Đã thiết lập
+	Not set up	Chưa thiết lập
+	Needs credentials	Cần thông tin xác thực
+	Set Up…	Thiết lập…
+	Edit…	Chỉnh sửa…
+	Client ID	Mã client
+	Client secret	Khóa bí mật client
+	Saved (leave empty to keep)	Đã lưu (để trống để giữ nguyên)
+	Paste here	Dán vào đây
+	Get credentials from {name}	Lấy thông tin xác thực từ {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Không có gì được gửi cho đến khi bạn chạy Tô tạo sinh. Mỗi lần chạy, PhotoCraft gửi vùng được chọn và phần ảnh xung quanh, mặt nạ của vùng chọn và câu lệnh của bạn tới {name} ({host}) kèm thông tin xác thực của bạn. Điều khoản và chính sách quyền riêng tư của nhà cung cấp được áp dụng, và chi phí sử dụng được tính vào tài khoản của bạn.
+	Results are downloaded from {hosts}.	Kết quả được tải xuống từ {hosts}.
+	Results carry Google's SynthID watermark.	Kết quả mang hình mờ SynthID của Google.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Mỗi lần Tô tạo sinh tạo ba biến thể, nên gửi ba yêu cầu, mỗi yêu cầu đều tính phí vào tài khoản của bạn.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Thông tin xác thực của bạn được lưu trong {store}, không bao giờ trong tệp cài đặt của PhotoCraft.
+	Enter every field for {provider}.	Hãy nhập mọi trường cho {provider}.
+	{provider} needs a prompt.	{provider} cần một câu lệnh.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Tô tạo sinh mặc định dùng {name} ({model}); đã thiết lập {count} nhà cung cấp.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Tắt. Hãy thiết lập một nhà cung cấp bằng thông tin xác thực của bạn để dùng Tô tạo sinh.
+# Generative Fill variations (#41)
+	Variations	Biến thể
+	No prompt: continues the image	Không có câu lệnh: tiếp nối ảnh
+	Sends the same area and prompt to {name} again for three more.	Gửi lại cùng vùng và câu lệnh tới {name} để có thêm ba biến thể.
+	{name}, which made this layer, is no longer set up.	{name}, nhà cung cấp đã tạo lớp này, không còn được thiết lập.
+	Generate More	Tạo thêm

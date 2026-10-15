@@ -4108,3 +4108,46 @@ cameraRaw	Yellow	Sárga
 	There are too many sets: delete one first.	Túl sok készlet van: előbb töröljön egyet.
 	set name	készlet neve
 	{set} (modified)	{set} (módosítva)
+# Generative Fill and Generative AI Settings (#41)
+	API key	API-kulcs
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Írd le, mi jöjjön létre a kijelölésben, vagy hagyd üresen, hogy a kép folytatódjon benne.
+	Fill the selection from a prompt	A kijelölés kitöltése leírás alapján
+	Generative AI	Generatív MI
+	Generative AI Settings…	Generatív MI beállításai…
+	Generative AI needs the desktop app.	A generatív MI-hez az asztali alkalmazás szükséges.
+	Generative Fill uses {name} ({model}).	A generatív kitöltés ezt használja: {name} ({model}).
+	Generative Fill…	Generatív kitöltés…
+	No API key is saved for {provider}.	Nincs mentett API-kulcs ehhez: {provider}.
+	Prompt (optional)	Leírás (nem kötelező)
+	Provider	Szolgáltató
+	Set up Generative Fill with your own API key	Generatív kitöltés beállítása saját API-kulccsal
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	A kijelölt terület, a körülötte lévő kép és a leírás ide kerül elküldésre: {name} ({model}).
+	What is sent, and to whom	Mi kerül elküldésre, és kinek
+	the macOS Keychain	macOS-kulcskarika
+	Windows Credential Manager	Windows Hitelesítőadat-kezelő
+	memory until PhotoCraft quits	memória, amíg a PhotoCraft be nem zárul
+	Default for Generative Fill	Alapértelmezett a generatív kitöltéshez
+	Set up	Beállítva
+	Not set up	Nincs beállítva
+	Needs credentials	Hitelesítő adatok szükségesek
+	Set Up…	Beállítás…
+	Client ID	Ügyfélazonosító
+	Client secret	Ügyféltitok
+	Saved (leave empty to keep)	Mentve (hagyd üresen a megtartáshoz)
+	Paste here	Illeszd be ide
+	Get credentials from {name}	Hitelesítő adatok beszerzése: {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Semmi sem kerül elküldésre, amíg nem futtatod a generatív kitöltést. Minden futtatáskor a PhotoCraft elküldi a kijelölt területet és a körülötte lévő képet, a kijelölés maszkját és a leírásodat a hitelesítő adataiddal ide: {name} ({host}). A szolgáltató felhasználási feltételei és adatvédelmi szabályzata érvényesek, a használatot a fiókodra számlázzák.
+	Results are downloaded from {hosts}.	Az eredmények letöltési helye: {hosts}.
+	Results carry Google's SynthID watermark.	Az eredmények a Google SynthID vízjelét hordozzák.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Minden generatív kitöltés három változatot készít, így három kérést küld, és mindegyiket a fiókodra számlázzák.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	A hitelesítő adataid tárolási helye: {store}; soha nem a PhotoCraft beállításfájljai.
+	Enter every field for {provider}.	Töltsd ki az összes mezőt ehhez: {provider}.
+	{provider} needs a prompt.	{provider}: leírás szükséges.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	A generatív kitöltés alapértelmezése: {name} ({model}); {count} szolgáltató van beállítva.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Kikapcsolva. A generatív kitöltéshez állíts be egy szolgáltatót a saját hitelesítő adataiddal.
+# Generative Fill variations (#41)
+	Variations	Változatok
+	No prompt: continues the image	Nincs leírás: a kép folytatása
+	Sends the same area and prompt to {name} again for three more.	Ugyanazt a területet és leírást újra elküldi ide: {name}, további háromért.
+	{name}, which made this layer, is no longer set up.	{name}, amely ezt a réteget készítette, már nincs beállítva.
+	Generate More	Továbbiak létrehozása

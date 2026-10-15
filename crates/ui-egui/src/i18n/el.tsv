@@ -3889,3 +3889,46 @@ curves	Smooth	Εξομάλυνση
 	There are too many sets: delete one first.	Υπάρχουν πάρα πολλά σύνολα: διαγράψτε πρώτα ένα.
 	set name	όνομα συνόλου
 	{set} (modified)	{set} (τροποποιημένο)
+# Generative Fill and Generative AI Settings (#41)
+	API key	Κλειδί API
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Περιγράψτε τι θα δημιουργηθεί στην επιλογή ή αφήστε το κενό για να συνεχιστεί η εικόνα μέσα της.
+	Fill the selection from a prompt	Γέμισμα της επιλογής από περιγραφή
+	Generative AI	Παραγωγική ΤΝ
+	Generative AI Settings…	Ρυθμίσεις παραγωγικής ΤΝ…
+	Generative AI needs the desktop app.	Η παραγωγική ΤΝ χρειάζεται την εφαρμογή υπολογιστή.
+	Generative Fill uses {name} ({model}).	Το παραγωγικό γέμισμα χρησιμοποιεί {name} ({model}).
+	Generative Fill…	Παραγωγικό γέμισμα…
+	No API key is saved for {provider}.	Δεν υπάρχει αποθηκευμένο κλειδί API για {provider}.
+	Prompt (optional)	Περιγραφή (προαιρετική)
+	Provider	Πάροχος
+	Set up Generative Fill with your own API key	Ρύθμιση παραγωγικού γεμίσματος με το δικό σας κλειδί API
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Η επιλεγμένη περιοχή, η εικόνα γύρω της και η περιγραφή αποστέλλονται στο {name} ({model}).
+	What is sent, and to whom	Τι αποστέλλεται και σε ποιον
+	the macOS Keychain	Κλειδοθήκη του macOS
+	Windows Credential Manager	Διαχείριση διαπιστευτηρίων των Windows
+	memory until PhotoCraft quits	μνήμη μέχρι να κλείσει το PhotoCraft
+	Default for Generative Fill	Προεπιλογή για το παραγωγικό γέμισμα
+	Set up	Ρυθμισμένο
+	Not set up	Μη ρυθμισμένο
+	Needs credentials	Χρειάζονται διαπιστευτήρια
+	Set Up…	Ρύθμιση…
+	Client ID	Αναγνωριστικό πελάτη
+	Client secret	Μυστικό πελάτη
+	Saved (leave empty to keep)	Αποθηκευμένο (αφήστε κενό για να διατηρηθεί)
+	Paste here	Επικολλήστε εδώ
+	Get credentials from {name}	Λήψη διαπιστευτηρίων από {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Τίποτα δεν αποστέλλεται μέχρι να εκτελέσετε το παραγωγικό γέμισμα. Κάθε φορά που το κάνετε, το PhotoCraft στέλνει στο {name} ({host}) την επιλεγμένη περιοχή και την εικόνα γύρω της, μια μάσκα της επιλογής και την περιγραφή σας, μαζί με τα διαπιστευτήριά σας. Ισχύουν οι όροι και η πολιτική απορρήτου του, και η χρήση χρεώνεται στον λογαριασμό σας.
+	Results are downloaded from {hosts}.	Τα αποτελέσματα λαμβάνονται από {hosts}.
+	Results carry Google's SynthID watermark.	Τα αποτελέσματα φέρουν το υδατογράφημα SynthID της Google.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Κάθε Παραγωγικό γέμισμα δημιουργεί τρεις παραλλαγές, άρα στέλνει τρία αιτήματα, το καθένα χρεώνεται στον λογαριασμό σας.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Τα διαπιστευτήριά σας φυλάσσονται στη {store}, ποτέ στα αρχεία ρυθμίσεων του PhotoCraft.
+	Enter every field for {provider}.	Συμπληρώστε όλα τα πεδία για τον πάροχο {provider}.
+	{provider} needs a prompt.	Ο πάροχος {provider} απαιτεί περιγραφή.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Το παραγωγικό γέμισμα χρησιμοποιεί από προεπιλογή το {name} ({model})· έχουν ρυθμιστεί {count} πάροχοι.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Ανενεργό. Ορίστε έναν πάροχο με τα δικά σας διαπιστευτήρια για να χρησιμοποιήσετε το παραγωγικό γέμισμα.
+# Generative Fill variations (#41)
+	Variations	Παραλλαγές
+	No prompt: continues the image	Χωρίς περιγραφή: συνεχίζει την εικόνα
+	Sends the same area and prompt to {name} again for three more.	Στέλνει ξανά την ίδια περιοχή και περιγραφή στο {name} για τρεις ακόμη.
+	{name}, which made this layer, is no longer set up.	Το {name}, που δημιούργησε αυτό το επίπεδο, δεν είναι πλέον ρυθμισμένο.
+	Generate More	Δημιουργία περισσότερων

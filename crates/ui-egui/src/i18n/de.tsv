@@ -3191,3 +3191,47 @@ curves	Smooth	Glätten
 	There are too many sets: delete one first.	Zu viele Sätze: Löschen Sie zuerst einen.
 	set name	Name des Satzes
 	{set} (modified)	{set} (geändert)
+# Generative Fill and Generative AI Settings (#41)
+	API key	API-Schlüssel
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Beschreiben Sie, was in der Auswahl entstehen soll, oder lassen Sie das Feld leer, um das Bild darin fortzusetzen.
+	Fill the selection from a prompt	Die Auswahl anhand einer Beschreibung füllen
+	Generative AI	Generative KI
+	Generative AI Settings…	Einstellungen für generative KI…
+	Generative AI needs the desktop app.	Generative KI gibt es nur in der Desktop-App.
+	Generative Fill uses {name} ({model}).	Generatives Füllen verwendet {name} ({model}).
+	Generative Fill…	Generatives Füllen…
+	No API key is saved for {provider}.	Für {provider} ist kein API-Schlüssel gespeichert.
+	Prompt (optional)	Beschreibung (optional)
+	Provider	Anbieter
+	Set up Generative Fill with your own API key	Generatives Füllen mit eigenem API-Schlüssel einrichten
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Der ausgewählte Bereich, seine Umgebung und die Beschreibung werden an {name} ({model}) gesendet.
+	What is sent, and to whom	Was gesendet wird, und an wen
+	the macOS Keychain	der macOS-Schlüsselbundverwaltung
+	Windows Credential Manager	der Windows-Anmeldeinformationsverwaltung
+	memory until PhotoCraft quits	dem Arbeitsspeicher, bis PhotoCraft beendet wird
+	Default for Generative Fill	Standard für generatives Füllen
+	Set up	Eingerichtet
+	Not set up	Nicht eingerichtet
+	Needs credentials	Zugangsdaten fehlen
+	Set Up…	Einrichten…
+	Edit…	Bearbeiten…
+	Client ID	Client-ID
+	Client secret	Client-Geheimnis
+	Saved (leave empty to keep)	Gespeichert (leer lassen, um beizubehalten)
+	Paste here	Hier einfügen
+	Get credentials from {name}	Zugangsdaten bei {name} holen
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Es wird nichts gesendet, bis Sie „Generatives Füllen“ ausführen. Jedes Mal sendet PhotoCraft den ausgewählten Bereich und das Bild darum herum, eine Maske der Auswahl und Ihren Prompt mit Ihren Zugangsdaten an {name} ({host}). Dessen Nutzungsbedingungen und Datenschutzrichtlinie gelten, und die Nutzung wird Ihrem Konto berechnet.
+	Results are downloaded from {hosts}.	Ergebnisse werden von {hosts} heruntergeladen.
+	Results carry Google's SynthID watermark.	Ergebnisse tragen Googles SynthID-Wasserzeichen.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Jedes generative Füllen erzeugt drei Varianten und sendet daher drei Anfragen, die jeweils Ihrem Konto berechnet werden.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Ihre Zugangsdaten werden in {store} aufbewahrt, nie in den Einstellungsdateien von PhotoCraft.
+	Enter every field for {provider}.	Füllen Sie alle Felder für {provider} aus.
+	{provider} needs a prompt.	{provider} benötigt einen Prompt.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Generatives Füllen verwendet standardmäßig {name} ({model}); {count} Anbieter sind eingerichtet.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Aus. Richten Sie einen Anbieter mit Ihren eigenen Zugangsdaten ein, um generatives Füllen zu verwenden.
+# Generative Fill variations (#41)
+	Variations	Varianten
+	No prompt: continues the image	Keine Beschreibung: setzt das Bild fort
+	Sends the same area and prompt to {name} again for three more.	Sendet denselben Bereich und dieselbe Beschreibung erneut an {name}, für drei weitere.
+	{name}, which made this layer, is no longer set up.	{name}, mit dem diese Ebene erstellt wurde, ist nicht mehr eingerichtet.
+	Generate More	Weitere generieren

@@ -4262,3 +4262,46 @@ shape	Appearance	Izgled
 	There are too many sets: delete one first.	Previše skupova: prvo obrišite jedan.
 	set name	ime skupa
 	{set} (modified)	{set} (izmenjen)
+# Generative Fill and Generative AI Settings (#41)
+	API key	API ključ
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Opišite šta treba generisati u selekciji ili ostavite prazno da bi se slika nastavila kroz nju.
+	Fill the selection from a prompt	Popuni selekciju prema opisu
+	Generative AI	Generativna VI
+	Generative AI Settings…	Podešavanja generativne VI…
+	Generative AI needs the desktop app.	Generativna VI zahteva desktop aplikaciju.
+	Generative Fill uses {name} ({model}).	Generativna popuna koristi {name} ({model}).
+	Generative Fill…	Generativna popuna…
+	No API key is saved for {provider}.	Nije sačuvan API ključ za {provider}.
+	Prompt (optional)	Opis (opciono)
+	Provider	Dobavljač
+	Set up Generative Fill with your own API key	Podesite generativnu popunu sopstvenim API ključem
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Selektovana oblast, slika oko nje i opis šalju se na {name} ({model}).
+	What is sent, and to whom	Šta se šalje i kome
+	the macOS Keychain	macOS Keychain
+	Windows Credential Manager	Windows upravljač akreditivima
+	memory until PhotoCraft quits	memorija dok se PhotoCraft ne zatvori
+	Default for Generative Fill	Podrazumevano za generativnu popunu
+	Set up	Podešeno
+	Not set up	Nije podešeno
+	Needs credentials	Potrebni su akreditivi
+	Set Up…	Podesi…
+	Client ID	ID klijenta
+	Client secret	Tajna klijenta
+	Saved (leave empty to keep)	Sačuvano (ostavite prazno da zadržite)
+	Paste here	Nalepite ovde
+	Get credentials from {name}	Nabavite akreditive: {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Ništa se ne šalje dok ne pokrenete generativnu popunu. Svaki put kada to uradite, PhotoCraft šalje selektovanu oblast i sliku oko nje, masku selekcije i vaš opis na {name} ({host}) sa vašim akreditivima. Važe njegovi uslovi korišćenja i politika privatnosti, a korišćenje se naplaćuje vašem nalogu.
+	Results are downloaded from {hosts}.	Rezultati se preuzimaju sa: {hosts}.
+	Results carry Google's SynthID watermark.	Rezultati nose Google SynthID vodeni žig.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Svaka generativna popuna pravi tri varijacije, pa šalje tri zahteva, a svaki se naplaćuje vašem nalogu.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Vaši akreditivi se čuvaju ovde: {store}, nikada u datotekama podešavanja PhotoCraft-a.
+	Enter every field for {provider}.	Popunite sva polja za {provider}.
+	{provider} needs a prompt.	{provider} zahteva opis.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Generativna popuna podrazumevano koristi {name} ({model}); podešenih dobavljača: {count}.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Isključeno. Podesite dobavljača sopstvenim akreditivima da biste koristili generativnu popunu.
+# Generative Fill variations (#41)
+	Variations	Varijacije
+	No prompt: continues the image	Bez opisa: nastavlja sliku
+	Sends the same area and prompt to {name} again for three more.	Ponovo šalje istu oblast i opis na {name} za još tri.
+	{name}, which made this layer, is no longer set up.	{name}, koji je napravio ovaj sloj, više nije podešen.
+	Generate More	Generiši još

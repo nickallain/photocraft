@@ -3919,3 +3919,46 @@ cameraData	Lens	Lens
 	There are too many sets: delete one first.	Çok fazla küme var: önce birini silin.
 	set name	küme adı
 	{set} (modified)	{set} (değiştirildi)
+# Generative Fill and Generative AI Settings (#41)
+	API key	API anahtarı
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	Seçimde neyin oluşturulacağını açıklayın veya görüntünün seçim boyunca devam etmesi için boş bırakın.
+	Fill the selection from a prompt	Seçimi bir istemle doldur
+	Generative AI	Üretken Yapay Zekâ
+	Generative AI Settings…	Üretken Yapay Zekâ Ayarları…
+	Generative AI needs the desktop app.	Üretken yapay zekâ için masaüstü uygulaması gerekir.
+	Generative Fill uses {name} ({model}).	Üretken Dolgu şunu kullanır: {name} ({model}).
+	Generative Fill…	Üretken Dolgu…
+	No API key is saved for {provider}.	{provider} için kayıtlı API anahtarı yok.
+	Prompt (optional)	İstem (isteğe bağlı)
+	Provider	Sağlayıcı
+	Set up Generative Fill with your own API key	Üretken Dolguyu kendi API anahtarınızla ayarlayın
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	Seçili alan, çevresindeki görüntü ve istem şuraya gönderilir: {name} ({model}).
+	What is sent, and to whom	Ne gönderilir ve kime
+	the macOS Keychain	macOS Anahtar Zinciri
+	Windows Credential Manager	Windows Kimlik Bilgisi Yöneticisi
+	memory until PhotoCraft quits	PhotoCraft kapanana kadar bellek
+	Default for Generative Fill	Üretken Dolgu için varsayılan
+	Set up	Ayarlandı
+	Not set up	Ayarlanmadı
+	Needs credentials	Kimlik bilgileri gerekli
+	Set Up…	Ayarla…
+	Client ID	İstemci kimliği
+	Client secret	İstemci gizli anahtarı
+	Saved (leave empty to keep)	Kaydedildi (korumak için boş bırakın)
+	Paste here	Buraya yapıştırın
+	Get credentials from {name}	Kimlik bilgilerini alın: {name}
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	Üretken Dolguyu çalıştırana kadar hiçbir şey gönderilmez. Her çalıştırdığınızda PhotoCraft seçili alanı ve çevresindeki görüntüyü, seçimin bir maskesini ve isteminizi kimlik bilgilerinizle birlikte şuraya gönderir: {name} ({host}). Sağlayıcının kullanım koşulları ve gizlilik politikası geçerlidir ve kullanım hesabınıza faturalandırılır.
+	Results are downloaded from {hosts}.	Sonuçlar şuradan indirilir: {hosts}.
+	Results carry Google's SynthID watermark.	Sonuçlar Google'ın SynthID filigranını taşır.
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	Her Üretken Dolgu üç varyasyon oluşturur, bu nedenle her biri hesabınıza faturalandırılan üç istek gönderir.
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	Kimlik bilgileriniz şurada saklanır: {store}; asla PhotoCraft'ın ayar dosyalarında saklanmaz.
+	Enter every field for {provider}.	{provider} için tüm alanları doldurun.
+	{provider} needs a prompt.	{provider} bir istem gerektirir.
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	Üretken Dolgu varsayılan olarak {name} ({model}) kullanır; {count} sağlayıcı ayarlı.
+	Off. Set up a provider with your own credentials to use Generative Fill.	Kapalı. Üretken Dolguyu kullanmak için kendi kimlik bilgilerinizle bir sağlayıcı ayarlayın.
+# Generative Fill variations (#41)
+	Variations	Varyasyonlar
+	No prompt: continues the image	İstem yok: görüntüyü sürdürür
+	Sends the same area and prompt to {name} again for three more.	Aynı alanı ve istemi üç tane daha için yeniden {name} hizmetine gönderir.
+	{name}, which made this layer, is no longer set up.	Bu katmanı oluşturan {name} artık ayarlı değil.
+	Generate More	Daha Fazla Oluştur

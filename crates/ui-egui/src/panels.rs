@@ -1138,6 +1138,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         if widgets::secondary_button(ui, tl!("Select and Mask…"), 0.0).clicked() {
                             let _ = crate::menus::invoke(app, ui.ctx(), "select.selectAndMask", json!({}));
                         }
+                        crate::genai_ui::options_bar_button(app, ui);
                     }
                     Tool::Lasso | Tool::PolygonLasso | Tool::MagneticLasso if t.pro => {
                         selection_mode_buttons(app, ui);
@@ -1165,6 +1166,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         if widgets::secondary_button(ui, tl!("Select and Mask…"), 0.0).clicked() {
                             let _ = crate::menus::invoke(app, ui.ctx(), "select.selectAndMask", json!({}));
                         }
+                        crate::genai_ui::options_bar_button(app, ui);
                         if crate::lasso_ui::active(app) || (app.ui.tool == Tool::PolygonLasso && !app.ui.polygon.is_empty()) {
                             hint(
                                 ui,
@@ -1202,6 +1204,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         if widgets::secondary_button(ui, tl!("Select and Mask…"), 0.0).clicked() {
                             let _ = crate::menus::invoke(app, ui.ctx(), "select.selectAndMask", json!({}));
                         }
+                        crate::genai_ui::options_bar_button(app, ui);
                     }
                     Tool::PaintBucket if t.pro => {
                         opt_label(ui, tl!("Fill"));
@@ -3512,6 +3515,8 @@ fn properties_body_inner(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         widgets::hairline(ui);
         ui.add_space(6.0);
     }
+    // A generative layer's variations, above its own sections.
+    crate::genai_ui::variations_section(app, ui);
     if let LayerContent::Adjustment(adj) = &layer.content {
         adjustment_controls(app, ui, id, adj);
     } else if layer.artboard().is_some() {

@@ -3865,3 +3865,47 @@ curves	Smooth	スムーズ
 	There are too many sets: delete one first.	セットが多すぎます。先に 1 つ削除してください。
 	set name	セット名
 	{set} (modified)	{set}（変更あり）
+# Generative Fill and Generative AI Settings (#41)
+	API key	API キー
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	選択範囲に生成する内容を入力してください。空のままにすると、周囲の画像を選択範囲の中へ続けます。
+	Fill the selection from a prompt	説明文から選択範囲を塗りつぶす
+	Generative AI	生成 AI
+	Generative AI Settings…	生成 AI の設定…
+	Generative AI needs the desktop app.	生成 AI はデスクトップアプリでのみ使えます。
+	Generative Fill uses {name} ({model}).	生成塗りつぶしは {name}（{model}）を使用します。
+	Generative Fill…	生成塗りつぶし…
+	No API key is saved for {provider}.	{provider} の API キーは保存されていません。
+	Prompt (optional)	説明文（省略可）
+	Provider	プロバイダー
+	Set up Generative Fill with your own API key	ご自身の API キーで生成塗りつぶしを設定
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	選択範囲、その周囲の画像、説明文が {name}（{model}）に送信されます。
+	What is sent, and to whom	送信される内容と送信先
+	the macOS Keychain	macOS のキーチェーン
+	Windows Credential Manager	Windows 資格情報マネージャー
+	memory until PhotoCraft quits	PhotoCraft を終了するまでのメモリ
+	Default for Generative Fill	生成塗りつぶしの既定
+	Set up	設定済み
+	Not set up	未設定
+	Needs credentials	認証情報が必要
+	Set Up…	設定…
+	Edit…	編集…
+	Client ID	クライアント ID
+	Client secret	クライアントシークレット
+	Saved (leave empty to keep)	保存済み（保持するには空欄のまま）
+	Paste here	ここに貼り付け
+	Get credentials from {name}	{name} で認証情報を取得
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	生成塗りつぶしを実行するまで、何も送信されません。実行するたびに、PhotoCraft は選択範囲とその周囲の画像、選択範囲のマスク、入力した説明文を、認証情報とともに {name}（{host}）へ送信します。同サービスの利用規約とプライバシーポリシーが適用され、利用料金はお使いのアカウントに請求されます。
+	Results are downloaded from {hosts}.	結果は {hosts} からダウンロードされます。
+	Results carry Google's SynthID watermark.	結果には Google の SynthID 透かしが入ります。
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	生成塗りつぶしは毎回 3 つのバリエーションを作るため、3 回リクエストを送信し、それぞれがお使いのアカウントに課金されます。
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	認証情報は {store} に保管され、PhotoCraft の設定ファイルには保存されません。
+	Enter every field for {provider}.	{provider} のすべての項目を入力してください。
+	{provider} needs a prompt.	{provider} には説明文が必要です。
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	生成塗りつぶしは既定で {name}（{model}）を使います。設定済みのプロバイダーは {count} 件です。
+	Off. Set up a provider with your own credentials to use Generative Fill.	オフです。生成塗りつぶしを使うには、ご自身の認証情報でプロバイダーを設定してください。
+# Generative Fill variations (#41)
+	Variations	バリエーション
+	No prompt: continues the image	説明文なし：画像を続けます
+	Sends the same area and prompt to {name} again for three more.	同じ範囲と説明文を {name} にもう一度送り、さらに 3 つ生成します。
+	{name}, which made this layer, is no longer set up.	このレイヤーを作成した {name} はもう設定されていません。
+	Generate More	さらに生成

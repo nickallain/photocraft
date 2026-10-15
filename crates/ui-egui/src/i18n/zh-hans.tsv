@@ -2805,3 +2805,47 @@ curves	Smooth	平滑
 	set name	组名称
 	{set} (modified)	{set}（已修改）
 	Random	随机
+# Generative Fill and Generative AI Settings (#41)
+	API key	API 密钥
+	Describe what to generate in the selection, or leave it empty to continue the image through it.	描述要在选区中生成的内容，留空则让周围的图像在选区中自然延续。
+	Fill the selection from a prompt	根据描述填充选区
+	Generative AI	生成式 AI
+	Generative AI Settings…	生成式 AI 设置…
+	Generative AI needs the desktop app.	生成式 AI 需要桌面版应用。
+	Generative Fill uses {name} ({model}).	生成式填充使用 {name}（{model}）。
+	Generative Fill…	生成式填充…
+	No API key is saved for {provider}.	尚未为 {provider} 保存 API 密钥。
+	Prompt (optional)	描述（可选）
+	Provider	服务提供方
+	Set up Generative Fill with your own API key	用你自己的 API 密钥设置生成式填充
+	The selected area, the image around it and the prompt are sent to {name} ({model}).	选中的区域、其周围的图像和描述会发送给 {name}（{model}）。
+	What is sent, and to whom	发送什么，发送给谁
+	the macOS Keychain	macOS 钥匙串
+	Windows Credential Manager	Windows 凭据管理器
+	memory until PhotoCraft quits	内存中，直到 PhotoCraft 退出
+	Default for Generative Fill	生成式填充的默认项
+	Set up	已设置
+	Not set up	未设置
+	Needs credentials	需要凭据
+	Set Up…	设置…
+	Edit…	编辑…
+	Client ID	客户端 ID
+	Client secret	客户端密钥
+	Saved (leave empty to keep)	已保存（留空则保持不变）
+	Paste here	粘贴到此处
+	Get credentials from {name}	从 {name} 获取凭据
+	Nothing is sent until you run Generative Fill. Each time you do, PhotoCraft sends the selected area and the image around it, a mask of the selection, and your prompt to {name} ({host}) with your credentials. Its terms and privacy policy apply, and its usage is billed to your account.	在你运行生成式填充之前，不会发送任何内容。每次运行时，PhotoCraft 会将选中的区域及其周围的图像、选区的蒙版以及你的描述，连同你的凭据一起发送给 {name}（{host}）。其条款和隐私政策适用，用量计入你的账户。
+	Results are downloaded from {hosts}.	生成结果会从 {hosts} 下载。
+	Results carry Google's SynthID watermark.	生成结果带有 Google 的 SynthID 水印。
+	Each Generative Fill makes three variations, so it sends three requests, each billed to your account.	每次生成式填充会生成三个变体，因此会发送三个请求，每个都计费到你的账户。
+	Your credentials are kept in {store}, never in PhotoCraft's settings files.	你的凭据保存在 {store}，不会写入 PhotoCraft 的设置文件。
+	Enter every field for {provider}.	请填写 {provider} 的所有字段。
+	{provider} needs a prompt.	{provider} 需要描述。
+	Generative Fill uses {name} ({model}) by default; {count} providers are set up.	生成式填充默认使用 {name}（{model}）；已设置 {count} 个服务提供方。
+	Off. Set up a provider with your own credentials to use Generative Fill.	已关闭。请用你自己的凭据设置服务提供方，以使用生成式填充。
+# Generative Fill variations (#41)
+	Variations	变体
+	No prompt: continues the image	无描述：延续图像
+	Sends the same area and prompt to {name} again for three more.	再次将相同区域和描述发送到 {name}，再生成三个。
+	{name}, which made this layer, is no longer set up.	创建此图层的 {name} 已不再设置。
+	Generate More	生成更多
