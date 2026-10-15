@@ -676,3 +676,28 @@ fn add_reference_reports_errors_but_not_a_cancel() {
     assert!(app.ui.status.contains("already open"), "{}", app.ui.status);
     assert!(app.ui.status_error);
 }
+
+#[test]
+fn re_picking_the_same_path_refreshes_the_thumbnail() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    let path = temp_ref("again.png");
+    let (dialog, _) = crate::file_dialog::fake(vec![
+        Some(crate::file_dialog::FileDialogAnswer::Paths(vec![path.clone()])),
+        Some(crate::file_dialog::FileDialogAnswer::Paths(vec![path.clone()])),
+    ]);
+    app.services.file_dialog = Some(dialog);
+    let ctx = egui::Context::default();
+    let id = open_prompt(&mut app);
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&ctx, None);
+    assert_eq!(reference_thumb(&mut app, &ctx, &path).unwrap().size(), [100, 100]);
+    // The file is rewritten with another size and picked again.
+    let px: Vec<u8> = (0..200 * 150).flat_map(|_| [1u8, 2, 3, 255]).collect();
+    let img = photocraft_codecs::Image::from_u8(200, 150, photocraft_codecs::ChannelLayout::Rgba, px).unwrap();
+    std::fs::write(&path, photocraft_codecs::encode(&img, photocraft_codecs::Format::Png, &Default::default()).unwrap()).unwrap();
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&ctx, None);
+    assert_eq!(reference_thumb(&mut app, &ctx, &path).unwrap().size(), [200, 150]);
+}

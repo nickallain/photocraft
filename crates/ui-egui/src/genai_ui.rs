@@ -288,6 +288,9 @@ pub(crate) fn pick_reference(app: &mut PhotocraftApp, dialog: u64) -> Result<Val
         // Load once now so a bad file is reported at once (and the thumbnail can be made).
         let png = photocraft_engine::genai_cmds::load_reference(&path)?;
         app.genai.reference_png = Some((path.clone(), png));
+        // A re-pick of the same path may be a different file now.
+        app.genai.reference_thumb = None;
+        app.genai.reference_thumb_failed = None;
         if let Some(d) = app.ui.dialogs.iter_mut().find(|d| d.id == dialog) {
             d.fields.insert("reference".into(), json!(path));
         }
@@ -427,7 +430,10 @@ fn prompt_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, f: &mut Map<String, V
         if reference && !p.supports_reference() {
             faint(
                 ui,
-                &crate::i18n::fmt(tl!("{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference."), &[("provider", info.name)]),
+                &crate::i18n::fmt(
+                    tl!("{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference."),
+                    &[("provider", &format!("{} ({})", info.name, info.model))],
+                ),
             );
         }
         if p.needs_prompt() && prompt.trim().is_empty() {

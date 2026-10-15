@@ -190,6 +190,10 @@ pub fn load_reference(path: &str) -> std::result::Result<Vec<u8>, String> {
     let unreadable = |why: &dyn std::fmt::Display| format!("Couldn't read the reference image: {why}");
     let too_big = || unreadable(&"the file is larger than 50 MB");
     let too_many = || unreadable(&"the image is larger than 100 megapixels");
+    // Checked before opening: opening a FIFO for reading would block forever.
+    if !std::fs::metadata(path).map_err(|e| unreadable(&e))?.is_file() {
+        return Err(unreadable(&"not a regular file"));
+    }
     let file = std::fs::File::open(path).map_err(|e| unreadable(&e))?;
     let meta = file.metadata().map_err(|e| unreadable(&e))?;
     if !meta.is_file() {
@@ -258,15 +262,22 @@ fn reference_param(p: &Value, provider: &dyn ImageProvider, cmd: &str) -> Result
     let bad = |msg: String| EngineError::BadParams { cmd: cmd.into(), msg };
     let path = match p.get("reference") {
         None | Some(Value::Null) => return Ok(None),
-        Some(Value::String(s)) if !s.trim().is_empty() => s.trim().to_owned(),
+        Some(Value::String(s)) if s.trim().is_empty() => return Ok(None),
+        Some(Value::String(s)) => s.trim().to_owned(),
         Some(_) => return Err(bad("`reference` must be a file path".into())),
     };
     if !provider.supports_reference() {
-        return Err(bad(format!("{} can't use a reference image", provider.info().name)));
+        return Err(bad(format!("{} can't use a reference image", provider_label(provider))));
     }
     let png = load_reference(&path).map_err(bad)?;
     let name = std::path::Path::new(&path).file_name().map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
     Ok(Some((png, name)))
+}
+
+/// "Name (model)": the model matters, since some models of a provider take a reference and some don't.
+fn provider_label(provider: &dyn ImageProvider) -> String {
+    let info = provider.info();
+    format!("{} ({})", info.name, info.model)
 }
 
 fn bad(msg: impl Into<String>) -> EngineError {
@@ -837,10 +848,18 @@ fn place(mut at_request: Surface, mut px: Vec<f32>, area: Rect, reference: &Refe
 /// unless the variable is set.
 fn dump(request: &EditRequest, results: &[Vec<u8>], stats: &[String]) {
     #[cfg(not(target_arch = "wasm32"))]
+    if let Some(root) = std::env::var_os("PHOTOCRAFT_GENAI_DUMP") {
+        dump_to(std::path::Path::new(&root), request, results, stats);
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = (request, results, stats);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn dump_to(root: &std::path::Path, request: &EditRequest, results: &[Vec<u8>], stats: &[String]) {
     {
-        let Some(root) = std::env::var_os("PHOTOCRAFT_GENAI_DUMP") else { return };
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
-        let dir = std::path::Path::new(&root).join(format!("fill-{stamp}"));
+        let dir = root.join(format!("fill-{stamp}"));
         if std::fs::create_dir_all(&dir).is_err() {
             return;
         }
@@ -1167,7 +1186,7 @@ fn more(s: &mut Session, p: &Value) -> Result<Value> {
         request.reference = Some(png);
     }
     if request.reference.is_some() && !provider.supports_reference() {
-        return Err(bad(format!("{} can't use a reference image", provider.info().name)));
+        return Err(bad(format!("{} can't use a reference image", provider_label(provider.as_ref()))));
     }
     crate::jobs::run(
         s,

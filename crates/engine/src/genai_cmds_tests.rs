@@ -1263,3 +1263,63 @@ fn a_jpeg_reference_size_is_read_from_its_header() {
     let e = load_reference(&path.to_string_lossy()).unwrap_err();
     assert!(e.contains("larger than 100 megapixels"), "{e}");
 }
+
+#[cfg(unix)]
+#[test]
+fn a_fifo_is_refused_without_blocking() {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-fifo", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pipe.png");
+    let _ = std::fs::remove_file(&path);
+    match std::process::Command::new("mkfifo").arg(&path).status() {
+        Ok(st) if st.success() => {}
+        _ => return,
+    }
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("not a regular file"), "{e}");
+}
+
+#[test]
+fn the_unsupported_provider_error_names_the_model() {
+    let mut s = session(64, 64);
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    s.set_image_provider(Some(Fake::new([1, 2, 3])));
+    let path = temp_png("lite.png", 100, 100, [9, 9, 9, 255]);
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": path.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("Fake (fake-1) can't use a reference image"), "{e}");
+}
+
+#[test]
+fn an_empty_reference_means_no_reference() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    for v in ["", "   "] {
+        s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": v})).unwrap();
+    }
+    let sent = fake.sent.lock().unwrap();
+    assert_eq!(sent.len(), 2);
+    assert!(sent.iter().all(|r| r.reference.is_none()));
+}
+
+#[test]
+fn a_truncated_png_is_unreadable() {
+    let path = temp_png("trunc-src.png", 300, 300, [1, 2, 3, 255]);
+    let mut bytes = std::fs::read(&path).unwrap();
+    // Header and IHDR intact, cut mid-IDAT (the file is mostly one IDAT).
+    bytes.truncate(bytes.len() * 2 / 3);
+    let cut = path.with_file_name("trunc.png");
+    std::fs::write(&cut, &bytes).unwrap();
+    let e = load_reference(&cut.to_string_lossy()).unwrap_err();
+    assert!(e.contains("Couldn't read the reference image"), "{e}");
+}
+
+#[test]
+fn the_dump_writes_the_sent_reference() {
+    let root = std::env::temp_dir().join(format!("pc-dump-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let request = EditRequest { image: vec![1], mask: vec![2], prompt: "p".into(), reference: Some(vec![9, 8, 7]), ..Default::default() };
+    dump_to(&root, &request, &[], &[]);
+    let dir = std::fs::read_dir(&root).unwrap().next().unwrap().unwrap().path();
+    assert_eq!(std::fs::read(dir.join("sent-reference.png")).unwrap(), vec![9, 8, 7]);
+    assert!(dir.join("sent-image.png").exists());
+}

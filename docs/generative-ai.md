@@ -43,7 +43,8 @@ until it is removed, and is never saved in the document.
   character reference exists only on a legacy endpoint that is being removed, so PhotoCraft uses
   the current one without it. For a provider that can't use a reference, the dialog shows a note
   and Generate stays disabled until the reference is removed or another provider is chosen; the
-  Reference row is shown only when some set-up provider supports it.
+  Reference row is shown only when some set-up provider supports it, or while a reference is set
+  (so it can be removed).
 - **What is sent.** The file is flattened, converted to sRGB and scaled down to at most 1024 px on
   the long side (never enlarged), with transparent areas turned white, then encoded as an opaque
   PNG. OpenAI gets the photo and then the reference as two `image[]` parts, with a sentence in the
