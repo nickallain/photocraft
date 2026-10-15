@@ -42,6 +42,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: &[API_KEY_FIELD],
     key_page: "https://fal.ai/dashboard/keys",
     note: "",
+    supports_reference: false,
     build,
 };
 
@@ -97,6 +98,7 @@ impl ImageProvider for Fal {
         Capabilities { generate: false, edit: true, variations: false }
     }
     fn edit(&self, r: &EditRequest) -> Result<GeneratedImage> {
+        crate::providers::common::check_reference(self, r)?;
         check_prompt(&r.prompt, false)?;
         same_size(&r.image, &r.mask)?;
         r.cancel.check()?;

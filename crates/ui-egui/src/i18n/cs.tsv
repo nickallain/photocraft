@@ -3841,3 +3841,12 @@ navigator	Zoom	Zvětšení
 	Sends the same area and prompt to {name} again for three more.	Odešle stejnou oblast a popis znovu do {name} pro tři další.
 	{name}, which made this layer, is no longer set up.	{name}, který tuto vrstvu vytvořil, už není nastaven.
 	Generate More	Generovat další
+	Reference	Reference
+	Add reference…	Přidat referenci…
+	Remove the reference	Odebrat referenci
+	No file was chosen.	Nebyl vybrán žádný soubor.
+	Reference images need the desktop app.	Referenční obrázky vyžadují desktopovou aplikaci.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} nemůže použít referenční obrázek. Zvolte OpenAI nebo Gemini, nebo referenci odeberte.
+	If you add a reference image to a fill, it is sent too.	Pokud k výplni přidáte referenční obrázek, odešle se také.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Vybraná oblast, obraz kolem ní, referenční obrázek a popis se odešlou do {name} ({model}).
+	Reference: {name}	Reference: {name}

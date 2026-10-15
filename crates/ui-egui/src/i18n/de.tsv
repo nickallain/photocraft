@@ -3235,3 +3235,12 @@ curves	Smooth	Glätten
 	Sends the same area and prompt to {name} again for three more.	Sendet denselben Bereich und dieselbe Beschreibung erneut an {name}, für drei weitere.
 	{name}, which made this layer, is no longer set up.	{name}, mit dem diese Ebene erstellt wurde, ist nicht mehr eingerichtet.
 	Generate More	Weitere generieren
+	Reference	Referenz
+	Add reference…	Referenz hinzufügen…
+	Remove the reference	Referenz entfernen
+	No file was chosen.	Es wurde keine Datei ausgewählt.
+	Reference images need the desktop app.	Referenzbilder gibt es nur in der Desktop-App.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} kann kein Referenzbild verwenden. Wählen Sie OpenAI oder Gemini oder entfernen Sie die Referenz.
+	If you add a reference image to a fill, it is sent too.	Wenn Sie einer Füllung ein Referenzbild hinzufügen, wird es ebenfalls gesendet.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Der ausgewählte Bereich, seine Umgebung, das Referenzbild und die Beschreibung werden an {name} ({model}) gesendet.
+	Reference: {name}	Referenz: {name}

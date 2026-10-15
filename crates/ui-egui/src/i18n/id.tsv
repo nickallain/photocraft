@@ -3225,3 +3225,12 @@ curves	Smooth	Haluskan
 	Sends the same area and prompt to {name} again for three more.	Mengirim area dan deskripsi yang sama ke {name} lagi untuk tiga lagi.
 	{name}, which made this layer, is no longer set up.	{name}, yang membuat lapisan ini, tidak lagi disiapkan.
 	Generate More	Buat Lagi
+	Reference	Referensi
+	Add reference…	Tambahkan referensi…
+	Remove the reference	Hapus referensi
+	No file was chosen.	Tidak ada file yang dipilih.
+	Reference images need the desktop app.	Gambar referensi memerlukan aplikasi desktop.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} tidak dapat menggunakan gambar referensi. Pilih OpenAI atau Gemini, atau hapus referensinya.
+	If you add a reference image to a fill, it is sent too.	Jika Anda menambahkan gambar referensi ke isian, gambar itu juga dikirim.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Area yang dipilih, gambar di sekitarnya, gambar referensi, dan deskripsi dikirim ke {name} ({model}).
+	Reference: {name}	Referensi: {name}

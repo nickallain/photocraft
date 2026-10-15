@@ -3962,3 +3962,12 @@ cameraData	Lens	Lens
 	Sends the same area and prompt to {name} again for three more.	Aynı alanı ve istemi üç tane daha için yeniden {name} hizmetine gönderir.
 	{name}, which made this layer, is no longer set up.	Bu katmanı oluşturan {name} artık ayarlı değil.
 	Generate More	Daha Fazla Oluştur
+	Reference	Referans
+	Add reference…	Referans ekle…
+	Remove the reference	Referansı kaldır
+	No file was chosen.	Hiçbir dosya seçilmedi.
+	Reference images need the desktop app.	Referans görüntüleri için masaüstü uygulaması gerekir.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} referans görüntüsü kullanamaz. OpenAI veya Gemini'yi seçin ya da referansı kaldırın.
+	If you add a reference image to a fill, it is sent too.	Bir dolguya referans görüntüsü eklerseniz o da gönderilir.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Seçili alan, çevresindeki görüntü, referans görüntüsü ve istem şuraya gönderilir: {name} ({model}).
+	Reference: {name}	Referans: {name}

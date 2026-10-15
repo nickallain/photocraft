@@ -3203,3 +3203,12 @@ curves	Smooth	Сгладить
 	Sends the same area and prompt to {name} again for three more.	Снова отправляет ту же область и описание в {name}, чтобы получить ещё три.
 	{name}, which made this layer, is no longer set up.	{name}, с помощью которого создан этот слой, больше не настроен.
 	Generate More	Создать ещё
+	Reference	Образец
+	Add reference…	Добавить образец…
+	Remove the reference	Убрать образец
+	No file was chosen.	Файл не выбран.
+	Reference images need the desktop app.	Изображения-образцы доступны только в настольном приложении.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} не может использовать изображение-образец. Выберите OpenAI или Gemini либо уберите образец.
+	If you add a reference image to a fill, it is sent too.	Если вы добавите к заливке изображение-образец, оно тоже будет отправлено.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Выделенная область, окружающее её изображение, изображение-образец и описание отправляются в {name} ({model}).
+	Reference: {name}	Образец: {name}

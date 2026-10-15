@@ -16,6 +16,11 @@ pub(crate) const ENDPOINT: &str = "https://api.openai.com/v1/images/edits";
 /// Added to a prompt: GPT Image otherwise changes the image outside the mask too (6/9/3 % of it in
 /// one test, 1/3/4 % with this). Never say "transparent": it drew a transparency checkerboard.
 const INSIDE_HINT: &str = "Keep all new content entirely inside the masked area and leave everything outside it unchanged.";
+/// Added when a reference image is sent as the second image.
+pub const REFERENCE_HINT: &str =
+    "The second image is a reference: show that same subject — same face, hair and clothing — in the masked area of the first image.";
+/// The request when there is a reference but no prompt.
+pub const REFERENCE_DEFAULT: &str = "Add the subject from the second image into the masked area.";
 const MODELS: &[(&str, &str)] = &[
     ("gpt-image-2", "GPT Image 2"),
     ("gpt-image-2.5-flare", "GPT Image 2.5 Flare"),
@@ -48,6 +53,7 @@ pub const SPEC: ProviderSpec = ProviderSpec {
     fields: &[API_KEY_FIELD],
     key_page: "https://platform.openai.com/api-keys",
     note: "",
+    supports_reference: true,
     build,
 };
 
@@ -81,11 +87,17 @@ pub fn output_size(model: &str, w: u32, h: u32) -> (u32, u32) {
     (sw, sh)
 }
 
-/// The prompt sent: the user's with [`INSIDE_HINT`] after it, or with none the request to
-/// continue the surroundings.
-fn prompt(p: &str) -> String {
+/// The prompt sent: the user's with [`INSIDE_HINT`] after it (and [`REFERENCE_HINT`] before that
+/// when there is a reference), or with none the request to continue the surroundings or, with a
+/// reference, to add its subject.
+fn prompt(p: &str, with_reference: bool) -> String {
     let p = p.trim();
-    if p.is_empty() { prompt_or_continue(p).to_owned() } else { format!("{p} {INSIDE_HINT}") }
+    match (p.is_empty(), with_reference) {
+        (true, false) => prompt_or_continue(p).to_owned(),
+        (true, true) => format!("{REFERENCE_DEFAULT} {REFERENCE_HINT} {INSIDE_HINT}"),
+        (false, true) => format!("{p} {REFERENCE_HINT} {INSIDE_HINT}"),
+        (false, false) => format!("{p} {INSIDE_HINT}"),
+    }
 }
 
 /// The reply: inline base64 PNG, or the service's error.
@@ -115,18 +127,34 @@ impl ImageProvider for OpenAi {
     fn min_side(&self) -> u32 {
         MIN_LONG as u32
     }
+    fn supports_reference(&self) -> bool {
+        true
+    }
     fn edit(&self, r: &EditRequest) -> Result<GeneratedImage> {
+        crate::providers::common::check_reference(self, r)?;
         check_prompt(&r.prompt, false)?;
         let (w, h) = same_size(&r.image, &r.mask)?;
         r.cancel.check()?;
         let hole = mask::alpha_hole(&r.image, &r.mask)?;
         let (ow, oh) = output_size(self.model, w, h);
         let mut form = Form::new();
-        form.text("model", self.model).text("prompt", &prompt(&r.prompt)).text("size", &format!("{ow}x{oh}")).text("n", "1").text("output_format", "png");
+        form.text("model", self.model)
+            .text("prompt", &prompt(&r.prompt, r.reference.is_some()))
+            .text("size", &format!("{ow}x{oh}"))
+            .text("n", "1")
+            .text("output_format", "png");
         if matches!(self.model, "gpt-image-1" | "gpt-image-1.5") {
             form.text("input_fidelity", "high");
         }
-        form.file("image", "image.png", "image/png", &r.image).file("mask", "mask.png", "image/png", &hole);
+        match &r.reference {
+            Some(reference) => {
+                form.file("image[]", "image.png", "image/png", &r.image).file("image[]", "reference.png", "image/png", reference);
+            }
+            None => {
+                form.file("image", "image.png", "image/png", &r.image);
+            }
+        }
+        form.file("mask", "mask.png", "image/png", &hole);
         let (content_type, body) = form.finish();
         let key = self.creds.require(API_KEY)?;
         let reply = self
@@ -157,6 +185,56 @@ mod tests {
     fn part(r: &crate::HttpRequest, name: &str) -> Option<Vec<u8>> {
         let parts = crate::multipart::parts(header(r, "content-type").unwrap(), &r.body).unwrap();
         parts.into_iter().find(|(n, _)| n == name).map(|(_, v)| v)
+    }
+
+    fn parts(r: &crate::HttpRequest) -> Vec<(String, Vec<u8>)> {
+        crate::multipart::parts(header(r, "content-type").unwrap(), &r.body).unwrap()
+    }
+
+    #[test]
+    fn a_reference_goes_second_as_image_array_parts() {
+        let (p, http) = provider("", vec![ok()]);
+        let mut r = edit_request("add my friend on the left", 64, 32);
+        r.reference = Some(png(10, 12));
+        p.edit(&r).unwrap();
+        let ps = parts(&http.requests()[0]);
+        let images: Vec<&Vec<u8>> = ps.iter().filter(|(n, _)| n == "image[]").map(|(_, v)| v).collect();
+        assert_eq!(images.len(), 2);
+        assert_eq!(crate::png_size(images[0]), Some((64, 32)), "the photo first");
+        assert_eq!(crate::png_size(images[1]), Some((10, 12)), "the reference second");
+        assert!(ps.iter().all(|(n, _)| n != "image"), "no single `image` part with a reference");
+        let prompt = String::from_utf8(part(&http.requests()[0], "prompt").unwrap()).unwrap();
+        assert!(prompt.starts_with("add my friend on the left") && prompt.contains(REFERENCE_HINT) && prompt.ends_with(INSIDE_HINT), "{prompt}");
+        assert!(!prompt.contains("transparent"));
+        assert!(p.supports_reference());
+    }
+
+    #[test]
+    fn an_empty_prompt_with_a_reference_asks_to_add_the_subject() {
+        let (p, http) = provider("", vec![ok()]);
+        let mut r = edit_request("", 16, 16);
+        r.reference = Some(png(8, 8));
+        p.edit(&r).unwrap();
+        let prompt = String::from_utf8(part(&http.requests()[0], "prompt").unwrap()).unwrap();
+        assert!(prompt.starts_with(REFERENCE_DEFAULT), "{prompt}");
+    }
+
+    #[test]
+    fn without_a_reference_the_request_is_unchanged() {
+        let (p, http) = provider("", vec![ok()]);
+        p.edit(&edit_request("a kayak", 16, 16)).unwrap();
+        let ps = parts(&http.requests()[0]);
+        assert_eq!(ps.iter().filter(|(n, _)| n == "image").count(), 1);
+        assert!(ps.iter().all(|(n, _)| n != "image[]"));
+    }
+
+    #[test]
+    fn input_fidelity_only_where_supported() {
+        for (model, sent) in [("gpt-image-1", true), ("gpt-image-1.5", true), ("gpt-image-2", false), ("gpt-image-1-mini", false)] {
+            let (p, http) = provider(model, vec![ok()]);
+            p.edit(&edit_request("x", 16, 16)).unwrap();
+            assert_eq!(part(&http.requests()[0], "input_fidelity").is_some(), sent, "{model}");
+        }
     }
 
     #[test]

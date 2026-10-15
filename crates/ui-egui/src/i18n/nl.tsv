@@ -3992,3 +3992,12 @@ curves	Smooth	Vloeiend maken
 	Sends the same area and prompt to {name} again for three more.	Stuurt hetzelfde gebied en dezelfde beschrijving opnieuw naar {name} voor nog drie.
 	{name}, which made this layer, is no longer set up.	{name}, waarmee deze laag is gemaakt, is niet meer ingesteld.
 	Generate More	Meer genereren
+	Reference	Referentie
+	Add reference…	Referentie toevoegen…
+	Remove the reference	Referentie verwijderen
+	No file was chosen.	Er is geen bestand gekozen.
+	Reference images need the desktop app.	Referentieafbeeldingen werken alleen in de desktop-app.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} kan geen referentieafbeelding gebruiken. Kies OpenAI of Gemini, of verwijder de referentie.
+	If you add a reference image to a fill, it is sent too.	Als u een referentieafbeelding aan een vulling toevoegt, wordt die ook verstuurd.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Het geselecteerde gebied, de omringende afbeelding, de referentieafbeelding en de beschrijving worden naar {name} ({model}) gestuurd.
+	Reference: {name}	Referentie: {name}

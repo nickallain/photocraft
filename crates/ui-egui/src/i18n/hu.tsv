@@ -4151,3 +4151,12 @@ cameraRaw	Yellow	Sárga
 	Sends the same area and prompt to {name} again for three more.	Ugyanazt a területet és leírást újra elküldi ide: {name}, további háromért.
 	{name}, which made this layer, is no longer set up.	{name}, amely ezt a réteget készítette, már nincs beállítva.
 	Generate More	Továbbiak létrehozása
+	Reference	Referencia
+	Add reference…	Referencia hozzáadása…
+	Remove the reference	A referencia eltávolítása
+	No file was chosen.	Nincs kiválasztott fájl.
+	Reference images need the desktop app.	A referenciaképekhez az asztali alkalmazás szükséges.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	A(z) {provider} nem tud referenciaképet használni. Válassza az OpenAI-t vagy a Geminit, vagy távolítsa el a referenciát.
+	If you add a reference image to a fill, it is sent too.	Ha egy kitöltéshez referenciaképet ad, az is elküldésre kerül.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	A kijelölt terület, a körülötte lévő kép, a referenciakép és a leírás ide kerül elküldésre: {name} ({model}).
+	Reference: {name}	Referencia: {name}

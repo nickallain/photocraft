@@ -4305,3 +4305,12 @@ shape	Appearance	Izgled
 	Sends the same area and prompt to {name} again for three more.	Ponovo šalje istu oblast i opis na {name} za još tri.
 	{name}, which made this layer, is no longer set up.	{name}, koji je napravio ovaj sloj, više nije podešen.
 	Generate More	Generiši još
+	Reference	Referenca
+	Add reference…	Dodaj referencu…
+	Remove the reference	Ukloni referencu
+	No file was chosen.	Nijedna datoteka nije izabrana.
+	Reference images need the desktop app.	Referentne slike zahtevaju desktop aplikaciju.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} ne može da koristi referentnu sliku. Izaberite OpenAI ili Gemini, ili uklonite referencu.
+	If you add a reference image to a fill, it is sent too.	Ako popuni dodate referentnu sliku, i ona se šalje.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Selektovana oblast, slika oko nje, referentna slika i opis šalju se na {name} ({model}).
+	Reference: {name}	Referenca: {name}

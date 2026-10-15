@@ -4022,3 +4022,12 @@ layerLabel	No Color	Sem cor
 	Sends the same area and prompt to {name} again for three more.	Envia a mesma área e descrição para {name} de novo para mais três.
 	{name}, which made this layer, is no longer set up.	{name}, que criou esta camada, não está mais configurado.
 	Generate More	Gerar mais
+	Reference	Referência
+	Add reference…	Adicionar referência…
+	Remove the reference	Remover a referência
+	No file was chosen.	Nenhum arquivo foi escolhido.
+	Reference images need the desktop app.	As imagens de referência precisam do aplicativo para desktop.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} não pode usar uma imagem de referência. Escolha OpenAI ou Gemini, ou remova a referência.
+	If you add a reference image to a fill, it is sent too.	Se você adicionar uma imagem de referência a um preenchimento, ela também é enviada.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	A área selecionada, a imagem ao redor, a imagem de referência e a descrição são enviadas para {name} ({model}).
+	Reference: {name}	Referência: {name}

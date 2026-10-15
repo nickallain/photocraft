@@ -3932,3 +3932,12 @@ curves	Smooth	Згладити
 	Sends the same area and prompt to {name} again for three more.	Знову надсилає ту саму область і опис до {name}, щоб отримати ще три.
 	{name}, which made this layer, is no longer set up.	{name}, за допомогою якого створено цей шар, більше не налаштовано.
 	Generate More	Створити ще
+	Reference	Зразок
+	Add reference…	Додати зразок…
+	Remove the reference	Прибрати зразок
+	No file was chosen.	Файл не вибрано.
+	Reference images need the desktop app.	Зображення-зразки доступні лише в настільному застосунку.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} не може використовувати зображення-зразок. Виберіть OpenAI або Gemini чи приберіть зразок.
+	If you add a reference image to a fill, it is sent too.	Якщо ви додасте до заливки зображення-зразок, його теж буде надіслано.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	Виділена область, зображення навколо неї, зображення-зразок та опис надсилаються до {name} ({model}).
+	Reference: {name}	Зразок: {name}

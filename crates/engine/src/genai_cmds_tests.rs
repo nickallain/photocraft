@@ -1044,3 +1044,282 @@ fn a_selection_too_large_for_the_soft_edge_keeps_its_own() {
     // A few planes of this many f32s each stay well under a GiB.
     const { assert!(MAX_EDGE_PIXELS <= 1 << 25) };
 }
+
+/// Like `Fake` but accepts references.
+struct Refs {
+    inner: Arc<Fake>,
+}
+
+impl ImageProvider for Refs {
+    fn info(&self) -> ProviderInfo {
+        ProviderInfo { id: "refs", name: "Refs", model: "r".into(), host: "example.invalid" }
+    }
+    fn capabilities(&self) -> Capabilities {
+        self.inner.capabilities()
+    }
+    fn supports_reference(&self) -> bool {
+        true
+    }
+    fn edit(&self, r: &EditRequest) -> photocraft_genai::Result<GeneratedImage> {
+        self.inner.edit(r)
+    }
+}
+
+/// A `w`×`h` PNG of one colour in its own folder under the temp dir (one folder per file name, so
+/// tests never share a file).
+fn temp_png(name: &str, w: u32, h: u32, rgba: [u8; 4]) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-{}", std::process::id(), name.replace(['.', ' '], "_")));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(name);
+    let px: Vec<u8> = (0..w * h).flat_map(|_| rgba).collect();
+    let img = Image::from_u8(w, h, ChannelLayout::Rgba, px).unwrap();
+    std::fs::write(&path, codecs::encode(&img, Format::Png, &Default::default()).unwrap()).unwrap();
+    path
+}
+
+fn with_refs(s: &mut Session) -> Arc<Fake> {
+    let fake = Fake::new([0, 128, 0]);
+    s.set_image_provider(Some(Arc::new(Refs { inner: fake.clone() })));
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    fake
+}
+
+#[test]
+fn a_reference_reaches_the_provider_as_a_small_png() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let path = temp_png("sam.png", 300, 200, [200, 100, 50, 255]);
+    s.execute(FILL, json!({"prompt": "add sam", "variations": 1, "reference": path.to_string_lossy()})).unwrap();
+    let sent = fake.sent.lock().unwrap();
+    let r = sent[0].reference.as_ref().expect("reference sent");
+    assert_eq!(photocraft_genai::png_size(r), Some((300, 200)), "small images keep their size");
+}
+
+#[test]
+fn a_large_reference_is_scaled_to_1024() {
+    let png = load_reference(&temp_png("big.png", 4000, 3000, [10, 20, 30, 255]).to_string_lossy()).unwrap();
+    assert_eq!(photocraft_genai::png_size(&png), Some((1024, 768)));
+}
+
+#[test]
+fn a_transparent_reference_is_flattened_onto_white() {
+    let png = load_reference(&temp_png("cutout.png", 100, 100, [0, 0, 0, 0]).to_string_lossy()).unwrap();
+    let img = codecs::decode(&png).unwrap().convert(ChannelLayout::Rgb, CodecSample::U8);
+    assert!(img.data().iter().all(|&v| v == 255), "transparent → white");
+}
+
+#[test]
+fn a_reference_path_with_spaces_and_accents_loads() {
+    assert!(load_reference(&temp_png("Sam Ö photo.png", 80, 80, [1, 2, 3, 255]).to_string_lossy()).is_ok());
+}
+
+#[test]
+fn reference_errors_are_clear_and_nothing_is_sent() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let missing = s.execute(FILL, json!({"prompt": "x", "reference": "C:/no/such/file.png"})).unwrap_err().to_string();
+    assert!(missing.contains("Couldn't read the reference image"), "{missing}");
+    let junk = std::env::temp_dir().join(format!("pc-ref-junk-{}.png", std::process::id()));
+    std::fs::write(&junk, b"not an image").unwrap();
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": junk.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("Couldn't read the reference image"), "{e}");
+    let tiny = temp_png("tiny.png", 40, 30, [5, 5, 5, 255]);
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": tiny.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("too small"), "{e}");
+    assert!(s.execute(FILL, json!({"prompt": "x", "reference": 7})).is_err());
+    assert!(fake.sent.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_provider_without_reference_support_is_refused_before_any_job() {
+    let mut s = session(64, 64);
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    let fake = Fake::new([1, 2, 3]);
+    s.set_image_provider(Some(fake.clone()));
+    let history = s.active().unwrap().history.past_len();
+    let path = temp_png("p.png", 100, 100, [9, 9, 9, 255]);
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": path.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("can't use a reference image"), "{e}");
+    assert!(fake.sent.lock().unwrap().is_empty());
+    assert_eq!(s.active().unwrap().history.past_len(), history);
+}
+
+#[test]
+fn generate_more_reuses_the_reference_after_the_file_is_gone() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let path = temp_png("gone.png", 120, 90, [50, 60, 70, 255]);
+    let r = s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": path.to_string_lossy()})).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    s.execute(MORE, json!({"layer": r["layer"], "count": 1})).unwrap();
+    let sent = fake.sent.lock().unwrap();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[1].reference, sent[0].reference, "same bytes, no re-read");
+    let layer = photocraft_doc::LayerId(r["layer"].as_u64().unwrap());
+    assert_eq!(s.generative_reference_name(layer), Some("gone.png"));
+}
+
+#[test]
+fn generate_more_can_take_another_reference() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    let a = temp_png("a.png", 100, 100, [1, 1, 1, 255]);
+    let b = temp_png("b.png", 200, 100, [2, 2, 2, 255]);
+    let r = s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": a.to_string_lossy()})).unwrap();
+    s.execute(MORE, json!({"layer": r["layer"], "count": 1, "reference": b.to_string_lossy()})).unwrap();
+    let sent = fake.sent.lock().unwrap();
+    assert_eq!(photocraft_genai::png_size(sent[1].reference.as_ref().unwrap()), Some((200, 100)));
+}
+
+#[test]
+fn a_reference_larger_than_50_mb_is_refused_without_reading_it() {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-huge", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("huge.png");
+    // Sparse: nothing is written, the length is only declared.
+    std::fs::File::create(&path).unwrap().set_len(MAX_REFERENCE_BYTES + 1).unwrap();
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("50 MB"), "{e}");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_folder_is_not_a_reference() {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-folder", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let e = load_reference(&dir.to_string_lossy()).unwrap_err();
+    assert!(e.contains("Couldn't read the reference image"), "{e}");
+}
+
+/// CRC-32 (PNG's) of `bytes`.
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut c = 0xFFFF_FFFFu32;
+    for &b in bytes {
+        c ^= u32::from(b);
+        for _ in 0..8 {
+            c = if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+        }
+    }
+    !c
+}
+
+#[test]
+fn a_reference_declaring_a_huge_size_is_refused_before_decoding() {
+    let img = Image::from_u8(1, 1, ChannelLayout::Rgba, vec![1, 2, 3, 255]).unwrap();
+    let mut png = codecs::encode(&img, Format::Png, &Default::default()).unwrap();
+    // IHDR: length (8..12), type (12..16), width (16..20), height (20..24), …, CRC (29..33).
+    png[16..20].copy_from_slice(&20_000u32.to_be_bytes());
+    png[20..24].copy_from_slice(&20_000u32.to_be_bytes());
+    let crc = crc32(&png[12..29]);
+    png[29..33].copy_from_slice(&crc.to_be_bytes());
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-bomb", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("bomb.png");
+    std::fs::write(&path, &png).unwrap();
+    let started = std::time::Instant::now();
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("larger than 100 megapixels"), "{e}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2), "refused from the header");
+}
+
+#[test]
+fn a_half_transparent_reference_is_blended_onto_white() {
+    let png = load_reference(&temp_png("half.png", 100, 100, [0, 0, 0, 128]).to_string_lossy()).unwrap();
+    let img = codecs::decode(&png).unwrap().convert(ChannelLayout::Rgb, CodecSample::U8);
+    assert!(img.data().iter().all(|&v| v.abs_diff(128) <= 2), "half black on white: {:?}", &img.data()[..3]);
+}
+
+#[test]
+fn generate_more_through_a_provider_without_references_is_refused() {
+    let mut s = session(64, 64);
+    let fake = Fake::new([0, 128, 0]);
+    let plain = Fake::new([1, 2, 3]);
+    let refs: SharedProvider = Arc::new(Refs { inner: fake.clone() });
+    let plain_shared: SharedProvider = plain.clone();
+    s.set_image_providers([("refs".to_owned(), refs), ("fake".to_owned(), plain_shared)].into(), Some("refs".into()));
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    let path = temp_png("more-plain.png", 100, 100, [3, 3, 3, 255]);
+    let r = s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": path.to_string_lossy()})).unwrap();
+    let e = s.execute(MORE, json!({"layer": r["layer"], "count": 1, "provider": "fake"})).unwrap_err().to_string();
+    assert!(e.contains("can't use a reference image"), "{e}");
+    assert!(plain.sent.lock().unwrap().is_empty());
+    assert_eq!(fake.sent.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_jpeg_reference_size_is_read_from_its_header() {
+    let img = Image::from_u8(70, 50, ChannelLayout::Rgb, vec![90; 70 * 50 * 3]).unwrap();
+    let mut jpeg = codecs::encode(&img, Format::Jpeg, &Default::default()).unwrap();
+    assert_eq!(jpeg_size(&jpeg), Some((70, 50)));
+    assert_eq!(jpeg_size(b"\xFF\xD8\xFF"), None, "truncated");
+    // Declare 20000×20000 in the start-of-frame: refused before decoding.
+    let sof = jpeg.windows(2).position(|w| w[0] == 0xFF && (0xC0..=0xC2).contains(&w[1])).unwrap();
+    jpeg[sof + 5..sof + 7].copy_from_slice(&20_000u16.to_be_bytes());
+    jpeg[sof + 7..sof + 9].copy_from_slice(&20_000u16.to_be_bytes());
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-jpegbomb", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("bomb.jpg");
+    std::fs::write(&path, &jpeg).unwrap();
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("larger than 100 megapixels"), "{e}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_fifo_is_refused_without_blocking() {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-fifo", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pipe.png");
+    let _ = std::fs::remove_file(&path);
+    match std::process::Command::new("mkfifo").arg(&path).status() {
+        Ok(st) if st.success() => {}
+        _ => return,
+    }
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("not a regular file"), "{e}");
+}
+
+#[test]
+fn the_unsupported_provider_error_names_the_model() {
+    let mut s = session(64, 64);
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    s.set_image_provider(Some(Fake::new([1, 2, 3])));
+    let path = temp_png("lite.png", 100, 100, [9, 9, 9, 255]);
+    let e = s.execute(FILL, json!({"prompt": "x", "reference": path.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("Fake (fake-1) can't use a reference image"), "{e}");
+}
+
+#[test]
+fn an_empty_reference_means_no_reference() {
+    let mut s = session(64, 64);
+    let fake = with_refs(&mut s);
+    for v in ["", "   "] {
+        s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": v})).unwrap();
+    }
+    let sent = fake.sent.lock().unwrap();
+    assert_eq!(sent.len(), 2);
+    assert!(sent.iter().all(|r| r.reference.is_none()));
+}
+
+#[test]
+fn a_truncated_png_is_unreadable() {
+    let path = temp_png("trunc-src.png", 300, 300, [1, 2, 3, 255]);
+    let mut bytes = std::fs::read(&path).unwrap();
+    // Header and IHDR intact, cut mid-IDAT (the file is mostly one IDAT).
+    bytes.truncate(bytes.len() * 2 / 3);
+    let cut = path.with_file_name("trunc.png");
+    std::fs::write(&cut, &bytes).unwrap();
+    let e = load_reference(&cut.to_string_lossy()).unwrap_err();
+    assert!(e.contains("Couldn't read the reference image"), "{e}");
+}
+
+#[test]
+fn the_dump_writes_the_sent_reference() {
+    let root = std::env::temp_dir().join(format!("pc-dump-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let request = EditRequest { image: vec![1], mask: vec![2], prompt: "p".into(), reference: Some(vec![9, 8, 7]), ..Default::default() };
+    dump_to(&root, &request, &[], &[]);
+    let dir = std::fs::read_dir(&root).unwrap().next().unwrap().unwrap().path();
+    assert_eq!(std::fs::read(dir.join("sent-reference.png")).unwrap(), vec![9, 8, 7]);
+    assert!(dir.join("sent-image.png").exists());
+}

@@ -258,6 +258,9 @@ pub struct EditRequest {
     pub mask: Vec<u8>,
     pub prompt: String,
     pub size: ImageSize,
+    /// One reference image (PNG, sRGB, long side ≤ 1024) of a subject to put in the fill, for
+    /// providers whose `supports_reference()` is true.
+    pub reference: Option<Vec<u8>>,
     /// The engine sets it from the job; the default never cancels.
     pub cancel: CancelToken,
 }
@@ -299,6 +302,10 @@ pub trait ImageProvider: Send + Sync {
     }
     /// Whether an edit needs a prompt (no promptless "continue the image" mode).
     fn needs_prompt(&self) -> bool {
+        false
+    }
+    /// Whether an edit can use `EditRequest::reference`.
+    fn supports_reference(&self) -> bool {
         false
     }
     fn generate(&self, _request: &GenerateRequest) -> Result<GeneratedImage> {

@@ -29,6 +29,9 @@ impl ImageProvider for Fake {
     fn needs_prompt(&self) -> bool {
         self.id == "firefly" || self.id == "ideogram-v3"
     }
+    fn supports_reference(&self) -> bool {
+        self.id == "openai" || self.id == "gemini"
+    }
     fn edit(&self, r: &EditRequest) -> photocraft_genai::Result<GeneratedImage> {
         let (w, h) = photocraft_genai::png_size(&r.image).unwrap();
         // Red with a coarse checkerboard of detail: a flat result is rejected as an empty fill.
@@ -474,4 +477,227 @@ fn the_settings_default_ignores_an_empty_choice() {
     assert_eq!(default_choice(&fields, &saved(&app)), "openai");
     fields.remove("default");
     assert_eq!(default_choice(&fields, &saved(&app)), "gemini");
+}
+
+fn temp_ref(name: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("pc-ui-ref-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let p = dir.join(name);
+    let px: Vec<u8> = (0..100 * 100).flat_map(|_| [120u8, 80, 40, 255]).collect();
+    let img = photocraft_codecs::Image::from_u8(100, 100, photocraft_codecs::ChannelLayout::Rgba, px).unwrap();
+    std::fs::write(&p, photocraft_codecs::encode(&img, photocraft_codecs::Format::Png, &Default::default()).unwrap()).unwrap();
+    p.to_string_lossy().into_owned()
+}
+
+fn prompt_fields(app: &PhotocraftApp, id: u64) -> Map<String, Value> {
+    app.ui.dialogs.iter().find(|d| d.id == id).unwrap().fields.clone()
+}
+
+#[test]
+fn the_reference_row_shows_only_when_a_provider_can_use_one() {
+    let store = Store::default();
+    let (app, _) = configured(&store, &["stability"]);
+    assert!(!reference_row_visible(&app));
+    let store = Store::default();
+    let (app, _) = configured(&store, &["stability", "openai"]);
+    assert!(reference_row_visible(&app));
+}
+
+#[test]
+fn picking_a_reference_sets_the_field_and_confirm_passes_it() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    let path = temp_ref("friend.png");
+    let (dialog, asked) = crate::file_dialog::fake(vec![Some(crate::file_dialog::FileDialogAnswer::Paths(vec![path.clone()]))]);
+    app.services.file_dialog = Some(dialog);
+    let id = open_prompt(&mut app);
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&egui::Context::default(), None);
+    app.poll_file_dialog(&egui::Context::default(), None);
+    assert!(matches!(asked.borrow().first(), Some(crate::file_dialog::FileDialogRequest::Open { multiple: false, .. })));
+    let mut f = prompt_fields(&app, id);
+    assert_eq!(f["reference"], path.as_str());
+    f.insert("prompt".into(), json!("add my friend"));
+    confirm(&mut app, &f).unwrap();
+    assert_eq!(app.genai.last_reference.as_deref(), Some(path.as_str()));
+    app.ui.dialogs.clear();
+    let id = open_prompt(&mut app);
+    assert_eq!(prompt_fields(&app, id)["reference"], path.as_str(), "remembered this session");
+}
+
+#[test]
+fn ok_is_off_while_the_provider_cannot_use_the_reference() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai", "stability"]);
+    restored.unwrap();
+    let id = open_prompt(&mut app);
+    let mut f = prompt_fields(&app, id);
+    f.insert("prompt".into(), json!("add my friend"));
+    f.insert("reference".into(), json!(temp_ref("r.png")));
+    f.insert("provider".into(), json!("stability"));
+    assert!(!can_confirm(&app, &f));
+    f.insert("provider".into(), json!("openai"));
+    assert!(can_confirm(&app, &f));
+    f.insert("reference".into(), json!(""));
+    f.insert("provider".into(), json!("stability"));
+    assert!(can_confirm(&app, &f), "no reference: Stability is fine");
+}
+
+#[test]
+fn removing_the_reference_clears_it() {
+    let store = Store::default();
+    let (mut app, _) = configured(&store, &["openai"]);
+    let id = open_prompt(&mut app);
+    let mut f = prompt_fields(&app, id);
+    let path = temp_ref("x.png");
+    f.insert("reference".into(), json!(path));
+    app.genai.last_reference = Some(path);
+    clear_reference(&mut app, &mut f);
+    assert_eq!(f["reference"], "");
+    assert!(app.genai.last_reference.is_none());
+}
+
+#[test]
+fn a_bad_reference_file_is_reported_and_not_set() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    let dir = std::env::temp_dir().join(format!("pc-ui-ref-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let bad = dir.join("not-an-image.png");
+    std::fs::write(&bad, b"not an image").unwrap();
+    let (dialog, _) = crate::file_dialog::fake(vec![Some(crate::file_dialog::FileDialogAnswer::Paths(vec![bad.to_string_lossy().into_owned()]))]);
+    app.services.file_dialog = Some(dialog);
+    let id = open_prompt(&mut app);
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&egui::Context::default(), None);
+    app.poll_file_dialog(&egui::Context::default(), None);
+    assert!(app.ui.status.contains("Couldn't read the reference image"), "{}", app.ui.status);
+    assert_eq!(prompt_fields(&app, id)["reference"], "");
+}
+
+#[test]
+fn the_variations_tooltip_names_the_reference() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    let path = temp_ref("kite-ref.png");
+    let r = app.run(FILL, json!({"prompt": "a kite", "variations": 1, "provider": "openai", "reference": path})).unwrap();
+    let group = LayerId(r["layer"].as_u64().unwrap());
+    let tip = variations_tooltip(&app, group);
+    assert!(tip.starts_with("a kite") && tip.contains("Reference: kite-ref.png"), "{tip}");
+}
+
+/// The prompt dialog with a reference chosen (`GENAI_SNAPSHOT_DIR=… cargo test` saves a look).
+#[test]
+fn the_reference_row_renders() {
+    let store = Store::default();
+    let store2 = store.clone();
+    let path = temp_ref("my-friend.png");
+    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 760.0)).with_max_steps(64).build_eframe(move |cc| {
+        PhotocraftApp::setup_context(&cc.egui_ctx, Default::default());
+        let (app, restored) = configured(&store2, &["openai", "stability"]);
+        restored.unwrap();
+        app
+    });
+    let id = open_prompt(h.state_mut());
+    h.state_mut().ui.dialog_mut(id).unwrap().fields.insert("reference".into(), json!(path));
+    h.run_steps(6);
+    h.get_by_label("Reference");
+    h.get_by_label("my-friend.png");
+    h.get_by_label("Remove the reference");
+    if let (Some(dir), Ok(img)) = (std::env::var_os("GENAI_SNAPSHOT_DIR"), h.render()) {
+        img.save(std::path::Path::new(&dir).join("reference-row.png")).unwrap();
+    }
+    h.get_by_label("Remove the reference").click();
+    h.run_steps(4);
+    h.get_by_label("Add reference…");
+    assert_eq!(prompt_fields(h.state(), id)["reference"], "");
+}
+
+#[test]
+fn a_remembered_reference_is_dropped_when_no_provider_can_use_it() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai", "stability"]);
+    restored.unwrap();
+    app.genai.last_reference = Some(temp_ref("kept.png"));
+    remove_provider(&mut app, "openai").unwrap();
+    let id = open_prompt(&mut app);
+    let mut f = prompt_fields(&app, id);
+    assert_eq!(f["reference"], "", "Stability alone can't use it, and the row to remove it is hidden");
+    f.insert("prompt".into(), json!("a lighthouse"));
+    assert!(can_confirm(&app, &f));
+}
+
+#[test]
+fn the_set_up_dialog_says_a_reference_is_sent_for_providers_that_take_one() {
+    let line = "If you add a reference image to a fill, it is sent too.";
+    // Nothing is set up yet: the user reads this before saving.
+    let openai = photocraft_genai::spec("openai").unwrap();
+    assert!(privacy_lines(openai).iter().any(|l| l == line));
+    let gemini = photocraft_genai::spec("gemini").unwrap();
+    assert!(privacy_lines(gemini).iter().any(|l| l == line));
+    let stability = photocraft_genai::spec("stability").unwrap();
+    assert!(!privacy_lines(stability).iter().any(|l| l == line));
+}
+
+#[test]
+fn a_picked_reference_is_read_once() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    let path = temp_ref("once.png");
+    let (dialog, _) = crate::file_dialog::fake(vec![Some(crate::file_dialog::FileDialogAnswer::Paths(vec![path.clone()]))]);
+    app.services.file_dialog = Some(dialog);
+    let id = open_prompt(&mut app);
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&egui::Context::default(), None);
+    app.poll_file_dialog(&egui::Context::default(), None);
+    std::fs::remove_file(&path).unwrap();
+    assert!(reference_thumb(&mut app, &egui::Context::default(), &path).is_some(), "the thumbnail comes from what the pick read");
+}
+
+#[test]
+fn add_reference_reports_errors_but_not_a_cancel() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    open_prompt(&mut app);
+    // No dialog service: ask_file answers "cancelled", which is not reported.
+    add_reference_clicked(&mut app);
+    assert_eq!(app.ui.status, "");
+    assert!(!app.ui.status_error);
+    // A file dialog already open is a real error.
+    let (dialog, _) = crate::file_dialog::fake(vec![None]);
+    app.services.file_dialog = Some(dialog);
+    add_reference_clicked(&mut app);
+    add_reference_clicked(&mut app);
+    assert!(app.ui.status.contains("already open"), "{}", app.ui.status);
+    assert!(app.ui.status_error);
+}
+
+#[test]
+fn re_picking_the_same_path_refreshes_the_thumbnail() {
+    let store = Store::default();
+    let (mut app, restored) = configured(&store, &["openai"]);
+    restored.unwrap();
+    let path = temp_ref("again.png");
+    let (dialog, _) = crate::file_dialog::fake(vec![
+        Some(crate::file_dialog::FileDialogAnswer::Paths(vec![path.clone()])),
+        Some(crate::file_dialog::FileDialogAnswer::Paths(vec![path.clone()])),
+    ]);
+    app.services.file_dialog = Some(dialog);
+    let ctx = egui::Context::default();
+    let id = open_prompt(&mut app);
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&ctx, None);
+    assert_eq!(reference_thumb(&mut app, &ctx, &path).unwrap().size(), [100, 100]);
+    // The file is rewritten with another size and picked again.
+    let px: Vec<u8> = (0..200 * 150).flat_map(|_| [1u8, 2, 3, 255]).collect();
+    let img = photocraft_codecs::Image::from_u8(200, 150, photocraft_codecs::ChannelLayout::Rgba, px).unwrap();
+    std::fs::write(&path, photocraft_codecs::encode(&img, photocraft_codecs::Format::Png, &Default::default()).unwrap()).unwrap();
+    pick_reference(&mut app, id).unwrap();
+    app.poll_file_dialog(&ctx, None);
+    assert_eq!(reference_thumb(&mut app, &ctx, &path).unwrap().size(), [200, 150]);
 }

@@ -3909,3 +3909,12 @@ curves	Smooth	スムーズ
 	Sends the same area and prompt to {name} again for three more.	同じ範囲と説明文を {name} にもう一度送り、さらに 3 つ生成します。
 	{name}, which made this layer, is no longer set up.	このレイヤーを作成した {name} はもう設定されていません。
 	Generate More	さらに生成
+	Reference	参照
+	Add reference…	参照を追加…
+	Remove the reference	参照を削除
+	No file was chosen.	ファイルが選択されていません。
+	Reference images need the desktop app.	参照画像はデスクトップアプリでのみ使えます。
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} は参照画像を使えません。OpenAI か Gemini を選ぶか、参照を削除してください。
+	If you add a reference image to a fill, it is sent too.	塗りつぶしに参照画像を追加すると、その画像も送信されます。
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	選択範囲、その周囲の画像、参照画像、説明文が {name}（{model}）に送信されます。
+	Reference: {name}	参照：{name}

@@ -3238,3 +3238,12 @@ curves	Smooth	Lisser
 	Sends the same area and prompt to {name} again for three more.	Renvoie la même zone et la même description à {name} pour trois de plus.
 	{name}, which made this layer, is no longer set up.	{name}, qui a créé ce calque, n'est plus configuré.
 	Generate More	En générer plus
+	Reference	Référence
+	Add reference…	Ajouter une référence…
+	Remove the reference	Retirer la référence
+	No file was chosen.	Aucun fichier n’a été choisi.
+	Reference images need the desktop app.	Les images de référence nécessitent l’application de bureau.
+	{provider} can't use a reference image. Choose OpenAI or Gemini, or remove the reference.	{provider} ne peut pas utiliser d’image de référence. Choisissez OpenAI ou Gemini, ou retirez la référence.
+	If you add a reference image to a fill, it is sent too.	Si vous ajoutez une image de référence à un remplissage, elle est aussi envoyée.
+	The selected area, the image around it, the reference image and the prompt are sent to {name} ({model}).	La zone sélectionnée, l’image qui l’entoure, l’image de référence et la description sont envoyées à {name} ({model}).
+	Reference: {name}	Référence : {name}
