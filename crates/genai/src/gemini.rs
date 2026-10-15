@@ -25,6 +25,10 @@ pub const MODELS: &[(&str, &str)] = &[
     ("gemini-3.1-flash-image", "Nano Banana 2"),
     ("gemini-3.1-flash-lite-image", "Nano Banana 2 Lite (fastest, 1K only)"),
 ];
+/// Appended to the instruction when a reference image is sent as the last image.
+pub const REFERENCE_LINE: &str = "The last image is a reference: put that same subject — same face, hair and clothing — into the area to fill.";
+/// The model that takes no reference image.
+const LITE: &str = "gemini-3.1-flash-lite-image";
 pub const DEFAULT_MODEL: &str = "gemini-nano-banana-2.1";
 
 fn build(model: &str, creds: crate::Credentials, http: std::sync::Arc<dyn HttpTransport>) -> Result<std::sync::Arc<dyn ImageProvider>> {
@@ -134,6 +138,10 @@ impl<T: HttpTransport> ImageProvider for GeminiProvider<T> {
         Capabilities { generate: true, edit: true, variations: true }
     }
 
+    fn supports_reference(&self) -> bool {
+        self.model != LITE
+    }
+
     fn edit_aspect(&self, w: u32, h: u32) -> (u32, u32) {
         crate::nearest_ratio(w, h, RATIOS).unwrap_or((1, 1))
     }
@@ -150,7 +158,11 @@ impl<T: HttpTransport> ImageProvider for GeminiProvider<T> {
         if crate::png_size(&r.mask) != Some(size) {
             return Err(GenError::Invalid("the mask must be a PNG the size of the image".into()));
         }
-        self.request(vec![text(&fill_instruction(&r.prompt)), png(&r.image), png(&r.mask)], size, r.size)
+        let mut input = vec![text(&fill_instruction(&r.prompt, r.reference.is_some())), png(&r.image), png(&r.mask)];
+        if let Some(reference) = &r.reference {
+            input.push(png(reference));
+        }
+        self.request(input, size, r.size)
     }
 
     fn variations(&self, r: &VariationRequest) -> Result<GeneratedImage> {
@@ -169,8 +181,11 @@ impl<T: HttpTransport> ImageProvider for GeminiProvider<T> {
 /// smooth placeholder made of the colours around it), so the model can't copy what was there and
 /// has no flat shape to mistake for an object. An empty prompt means "what would be there without
 /// whatever stood in it": the background and anything crossing the edge carry on through it.
-pub fn fill_instruction(prompt: &str) -> String {
-    let what = if prompt.trim().is_empty() {
+pub fn fill_instruction(prompt: &str, with_reference: bool) -> String {
+    let what = if prompt.trim().is_empty() && with_reference {
+        "Replace the placeholder with: add the subject from the last image. Make it belong to the scene: the right size          for its place in the perspective, lit from the same direction, casting and receiving shadows and reflections,          and interacting with whatever touches it. Around the new content, continue the background and anything that          crosses the placeholder's edge."
+            .to_owned()
+    } else if prompt.trim().is_empty() {
         "Replace the placeholder with what would be there if whatever stood in it had never existed: continue the \
          background, surfaces, textures and lighting from around it, and carry on anything that crosses its edge (lines, \
          edges, horizon, patterns, objects partly outside it) the way it would plausibly continue. Do not add a new \
@@ -185,13 +200,14 @@ pub fn fill_instruction(prompt: &str) -> String {
             prompt.trim().trim_end_matches('.')
         )
     };
+    let reference = if with_reference { format!(" {REFERENCE_LINE}") } else { String::new() };
     format!(
         "Edit the first image. The second image is a mask the same size: white marks an area of the first image that has \
          been blurred out as a placeholder, black the area to keep. The blur is not part of the scene: replace all of it \
          with sharp, detailed content that has the same focus, noise and grain as its surroundings. Before editing, study \
          the whole first image: what the scene is, where the light comes from, the perspective and depth, and what runs \
          up to the placeholder. {what} Keep everything in the black area, the framing, the scale and the position of \
-         every object exactly as they are. Reply with the edited image only."
+         every object exactly as they are.{reference} Reply with the edited image only."
     )
 }
 
@@ -328,10 +344,42 @@ mod tests {
     }
 
     #[test]
+    fn a_reference_is_sent_last_with_an_instruction_line() {
+        let reply = Fake::ok(json!({"output_image": {"mime_type": "image/jpeg", "data": b64(b"AAAA")}}));
+        let p = provider(vec![reply]);
+        let mut r = edit("add my friend", 16, 16);
+        r.reference = Some(png_of(8, 8));
+        p.edit(&r).unwrap();
+        let sent = p.transport().sent.lock().unwrap();
+        let input = sent[0].2["input"].as_array().unwrap();
+        assert_eq!(input.len(), 4, "instruction, image, mask, reference");
+        assert!(input[0]["text"].as_str().unwrap().contains(REFERENCE_LINE));
+        assert_eq!(input[3]["type"], "image");
+        assert_eq!(input[3]["data"], b64(&png_of(8, 8)));
+        assert!(p.supports_reference());
+    }
+
+    #[test]
+    fn lite_cannot_use_a_reference() {
+        let p = GeminiProvider::new(ApiKey::new("k").unwrap(), "gemini-3.1-flash-lite-image", Fake::new(vec![])).unwrap();
+        assert!(!p.supports_reference());
+        let mut r = edit("x", 8, 8);
+        r.reference = Some(png_of(4, 4));
+        assert!(matches!(p.edit(&r), Err(GenError::Unsupported(_))));
+    }
+
+    #[test]
+    fn an_empty_prompt_with_a_reference_adds_the_subject() {
+        let t = fill_instruction("", true);
+        assert!(t.contains("add the subject from the last image") && t.contains(REFERENCE_LINE), "{t}");
+        assert!(!fill_instruction("", false).contains(REFERENCE_LINE));
+    }
+
+    #[test]
     fn an_empty_prompt_asks_for_removal() {
-        let empty = fill_instruction("");
+        let empty = fill_instruction("", false);
         assert!(empty.contains("had never existed") && empty.contains("Do not add a new"), "{empty}");
-        assert!(fill_instruction("  a boat. ").contains("placeholder with: a boat."));
+        assert!(fill_instruction("  a boat. ", false).contains("placeholder with: a boat."));
     }
 
     #[test]
