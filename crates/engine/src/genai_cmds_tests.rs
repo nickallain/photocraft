@@ -1170,3 +1170,96 @@ fn generate_more_can_take_another_reference() {
     let sent = fake.sent.lock().unwrap();
     assert_eq!(photocraft_genai::png_size(sent[1].reference.as_ref().unwrap()), Some((200, 100)));
 }
+
+#[test]
+fn a_reference_larger_than_50_mb_is_refused_without_reading_it() {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-huge", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("huge.png");
+    // Sparse: nothing is written, the length is only declared.
+    std::fs::File::create(&path).unwrap().set_len(MAX_REFERENCE_BYTES + 1).unwrap();
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("50 MB"), "{e}");
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_folder_is_not_a_reference() {
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-folder", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let e = load_reference(&dir.to_string_lossy()).unwrap_err();
+    assert!(e.contains("Couldn't read the reference image"), "{e}");
+}
+
+/// CRC-32 (PNG's) of `bytes`.
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut c = 0xFFFF_FFFFu32;
+    for &b in bytes {
+        c ^= u32::from(b);
+        for _ in 0..8 {
+            c = if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+        }
+    }
+    !c
+}
+
+#[test]
+fn a_reference_declaring_a_huge_size_is_refused_before_decoding() {
+    let img = Image::from_u8(1, 1, ChannelLayout::Rgba, vec![1, 2, 3, 255]).unwrap();
+    let mut png = codecs::encode(&img, Format::Png, &Default::default()).unwrap();
+    // IHDR: length (8..12), type (12..16), width (16..20), height (20..24), …, CRC (29..33).
+    png[16..20].copy_from_slice(&20_000u32.to_be_bytes());
+    png[20..24].copy_from_slice(&20_000u32.to_be_bytes());
+    let crc = crc32(&png[12..29]);
+    png[29..33].copy_from_slice(&crc.to_be_bytes());
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-bomb", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("bomb.png");
+    std::fs::write(&path, &png).unwrap();
+    let started = std::time::Instant::now();
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("larger than 100 megapixels"), "{e}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2), "refused from the header");
+}
+
+#[test]
+fn a_half_transparent_reference_is_blended_onto_white() {
+    let png = load_reference(&temp_png("half.png", 100, 100, [0, 0, 0, 128]).to_string_lossy()).unwrap();
+    let img = codecs::decode(&png).unwrap().convert(ChannelLayout::Rgb, CodecSample::U8);
+    assert!(img.data().iter().all(|&v| v.abs_diff(128) <= 2), "half black on white: {:?}", &img.data()[..3]);
+}
+
+#[test]
+fn generate_more_through_a_provider_without_references_is_refused() {
+    let mut s = session(64, 64);
+    let fake = Fake::new([0, 128, 0]);
+    let plain = Fake::new([1, 2, 3]);
+    let refs: SharedProvider = Arc::new(Refs { inner: fake.clone() });
+    let plain_shared: SharedProvider = plain.clone();
+    s.set_image_providers([("refs".to_owned(), refs), ("fake".to_owned(), plain_shared)].into(), Some("refs".into()));
+    s.execute("select.rect", json!({"x": 8, "y": 8, "width": 16, "height": 16})).unwrap();
+    let path = temp_png("more-plain.png", 100, 100, [3, 3, 3, 255]);
+    let r = s.execute(FILL, json!({"prompt": "x", "variations": 1, "reference": path.to_string_lossy()})).unwrap();
+    let e = s.execute(MORE, json!({"layer": r["layer"], "count": 1, "provider": "fake"})).unwrap_err().to_string();
+    assert!(e.contains("can't use a reference image"), "{e}");
+    assert!(plain.sent.lock().unwrap().is_empty());
+    assert_eq!(fake.sent.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_jpeg_reference_size_is_read_from_its_header() {
+    let img = Image::from_u8(70, 50, ChannelLayout::Rgb, vec![90; 70 * 50 * 3]).unwrap();
+    let mut jpeg = codecs::encode(&img, Format::Jpeg, &Default::default()).unwrap();
+    assert_eq!(jpeg_size(&jpeg), Some((70, 50)));
+    assert_eq!(jpeg_size(b"\xFF\xD8\xFF"), None, "truncated");
+    // Declare 20000×20000 in the start-of-frame: refused before decoding.
+    let sof = jpeg.windows(2).position(|w| w[0] == 0xFF && (0xC0..=0xC2).contains(&w[1])).unwrap();
+    jpeg[sof + 5..sof + 7].copy_from_slice(&20_000u16.to_be_bytes());
+    jpeg[sof + 7..sof + 9].copy_from_slice(&20_000u16.to_be_bytes());
+    let dir = std::env::temp_dir().join(format!("pc-ref-{}-jpegbomb", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("bomb.jpg");
+    std::fs::write(&path, &jpeg).unwrap();
+    let e = load_reference(&path.to_string_lossy()).unwrap_err();
+    assert!(e.contains("larger than 100 megapixels"), "{e}");
+}

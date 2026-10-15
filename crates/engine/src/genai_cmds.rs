@@ -133,29 +133,106 @@ pub const REFERENCE_SIDE: u32 = 1024;
 /// A reference whose long side is shorter than this is refused.
 #[cfg(not(target_arch = "wasm32"))]
 const MIN_REFERENCE_SIDE: u32 = 64;
+/// Largest reference accepted, in pixels (100 megapixels): bigger ones would hold several
+/// full-size copies while being flattened and scaled.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_REFERENCE_PIXELS: u64 = 100_000_000;
+
+/// The pixel size a JPEG's header declares (its first start-of-frame marker), without decoding.
+#[cfg(not(target_arch = "wasm32"))]
+fn jpeg_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    let be16 = |i: usize| bytes.get(i..i + 2).and_then(|b| b.try_into().ok()).map(u16::from_be_bytes);
+    if !bytes.starts_with(&[0xFF, 0xD8]) {
+        return None;
+    }
+    let mut i = 2;
+    loop {
+        // Fill bytes before a marker.
+        while bytes.get(i) == Some(&0xFF) && bytes.get(i + 1) == Some(&0xFF) {
+            i += 1;
+        }
+        if bytes.get(i) != Some(&0xFF) {
+            return None;
+        }
+        let marker = *bytes.get(i + 1)?;
+        match marker {
+            0x01 | 0xD0..=0xD8 => i += 2,
+            0xC0..=0xCF if !matches!(marker, 0xC4 | 0xC8 | 0xCC) => {
+                let h = be16(i + 5)?;
+                let w = be16(i + 7)?;
+                return Some((u32::from(w), u32::from(h)));
+            }
+            0xD9 | 0xDA => return None,
+            _ => {
+                let len = usize::from(be16(i + 2)?);
+                if len < 2 {
+                    return None;
+                }
+                i += 2 + len;
+            }
+        }
+    }
+}
+
+/// The pixel size `bytes` declares in its header, where that can be read without decoding.
+#[cfg(not(target_arch = "wasm32"))]
+fn declared_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    codecs::probe_size(bytes).ok().or_else(|| photocraft_genai::png_size(bytes)).or_else(|| jpeg_size(bytes))
+}
 
 /// A reference image file as the providers get it: flattened onto white, 8-bit sRGB, long side at
-/// most `REFERENCE_SIDE` (never enlarged), encoded as an opaque RGB PNG.
+/// most `REFERENCE_SIDE` (never enlarged), encoded as an opaque RGB PNG. Only regular files of at
+/// most `MAX_REFERENCE_BYTES` are read, and images over 100 megapixels are refused (from the
+/// header where it can be read, so a small file declaring a huge image is never decoded).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_reference(path: &str) -> std::result::Result<Vec<u8>, String> {
+    use std::io::Read;
     let unreadable = |why: &dyn std::fmt::Display| format!("Couldn't read the reference image: {why}");
-    let len = std::fs::metadata(path).map_err(|e| unreadable(&e))?.len();
-    if len > MAX_REFERENCE_BYTES {
-        return Err(unreadable(&"the file is larger than 50 MB"));
+    let too_big = || unreadable(&"the file is larger than 50 MB");
+    let too_many = || unreadable(&"the image is larger than 100 megapixels");
+    let file = std::fs::File::open(path).map_err(|e| unreadable(&e))?;
+    let meta = file.metadata().map_err(|e| unreadable(&e))?;
+    if !meta.is_file() {
+        return Err(unreadable(&"not a regular file"));
     }
-    let bytes = std::fs::read(path).map_err(|e| unreadable(&e))?;
+    if meta.len() > MAX_REFERENCE_BYTES {
+        return Err(too_big());
+    }
+    // Bounded even if the file grows while it is read.
+    let mut bytes = Vec::new();
+    file.take(MAX_REFERENCE_BYTES + 1).read_to_end(&mut bytes).map_err(|e| unreadable(&e))?;
+    if bytes.len() as u64 > MAX_REFERENCE_BYTES {
+        return Err(too_big());
+    }
+    if declared_size(&bytes).is_some_and(|(w, h)| u64::from(w) * u64::from(h) > MAX_REFERENCE_PIXELS) {
+        return Err(too_many());
+    }
     let name = std::path::Path::new(path).file_name().map_or_else(|| "reference".into(), |n| n.to_string_lossy().into_owned());
     let doc = photocraft_io::import(&name, &bytes).map_err(|e| unreadable(&e))?.document;
+    drop(bytes);
     let bounds = doc.bounds();
     let (w, h) = (bounds.width(), bounds.height());
+    if u64::from(w) * u64::from(h) > MAX_REFERENCE_PIXELS {
+        return Err(too_many());
+    }
     if w.max(h) < MIN_REFERENCE_SIDE {
         return Err("The reference image is too small".into());
     }
     let srgb = srgb_composite(&doc, bounds).map_err(|e| unreadable(&e))?;
+    drop(doc);
     let k = (f64::from(REFERENCE_SIDE) / f64::from(w.max(h))).min(1.0);
     let (tw, th) = (((f64::from(w) * k).round() as u32).max(1), ((f64::from(h) * k).round() as u32).max(1));
-    let small = scaled(&srgb, bounds, tw, th);
-    let rgba = small.convert(PixelFormat::new(ColorMode::Rgb, SampleType::U8, true)).to_interleaved(Rect::from_xywh(0, 0, tw, th));
+    // The composite already covers just the document at the origin, so it is resized directly
+    // (no full-size copy, as `scaled` makes for an area).
+    let small = if (tw, th) == (w, h) {
+        srgb
+    } else {
+        let (sx, sy) = (f64::from(tw) / f64::from(w), f64::from(th) / f64::from(h));
+        photocraft_algo::resample::resize_surface(&srgb, sx, sy, photocraft_algo::resample::Resample::Bicubic)
+    };
+    let rgba8 = PixelFormat::new(ColorMode::Rgb, SampleType::U8, true);
+    let small = if small.format() == rgba8 { small } else { small.convert(rgba8) };
+    let rgba = small.to_interleaved(Rect::from_xywh(0, 0, tw, th));
     // Transparent parts become white: a cut-out subject reads cleanly.
     let rgb: Vec<u8> = rgba
         .as_chunks::<4>()
